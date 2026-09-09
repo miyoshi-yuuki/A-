@@ -14,7 +14,7 @@
 {% endif %}
 
 <p>
-  <a href="/shelter_search">検索画面に戻る</a> |
-  <a href="/">トップページへ戻る</a>
+  <a href="{{ url_for('shelter_search') }}">検索画面に戻る</a> |
+  <a href="{{ url_for('index') }}">トップページへ戻る</a>
 </p>
 {% endblock %}

@@ -2,24 +2,345 @@
 
 {% block title %}指示・発信ボード - 防災アプリ{% endblock %}
 
-{% block content %}
-<h2>発信ボード</h2>
-<p>住民向けの発信を登録・確認できます。</p>
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --blue: #2c5eae;
+    --green: #1f9d4a;
+    --page-width: 910px;
+    --board-ink: #51606e;
+    --board-blue: #dcebf7;
+  }
 
-<!-- 発信一覧 -->
-<h3>発信一覧</h3>
-{% if instructions %}
-<table border="1" cellpadding="5">
-  <tr>
-    <th>内容</th>
-  </tr>
-  {% for inst in instructions %}
-  <tr>
-    <td>{{ inst.content }}{% if inst.shelter %}（避難先: {{ inst.shelter }}）{% endif %}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>登録されている指示はありません。</p>
-{% endif %}
+  .board-page {
+    margin: 0;
+    color: var(--board-ink);
+    background: #ffffff;
+    font-family: "Noto Sans JP", "Yu Gothic", sans-serif;
+  }
+
+  .board-page .app-header {
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 max(32px, calc((100% - 1390px) / 2));
+    color: #ffffff;
+    background: linear-gradient(110deg, #315eae, #24539c);
+    box-shadow: 0 1px 4px rgba(35, 65, 100, 0.18);
+  }
+
+  .board-page .app-header h1 {
+    margin: 0;
+    font-size: 27px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .board-page .menu-button {
+    border: 0;
+    padding: 4px 0;
+    color: #ffffff;
+    background: transparent;
+    font-size: 29px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .board-page .app-nav {
+    position: absolute;
+    z-index: 10;
+    top: 70px;
+    right: max(32px, calc((100% - 1390px) / 2));
+    display: none;
+    padding: 16px 20px;
+    background: #ffffff;
+    box-shadow: 0 4px 14px rgba(40, 65, 95, 0.2);
+  }
+
+  .board-page .app-nav.is-open { display: block; }
+  .board-page .app-nav a { color: var(--blue); }
+
+  .board-page main {
+    width: min(var(--page-width), calc(100% - 40px));
+    margin: 32px auto 84px;
+  }
+
+  .board-shell {
+    width: 100%;
+  }
+
+  .board-frame {
+    padding: 28px;
+    border-radius: 17px;
+    background: #ffffff;
+    box-shadow: 0 4px 22px rgba(45, 75, 112, 0.1);
+  }
+
+  .board-heading {
+    margin: 0 0 22px;
+    color: var(--blue);
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .board-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 22px 14px;
+  }
+
+  .field-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  select,
+  input[type="text"],
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    border: 1px solid #d3dbe3;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--board-ink);
+    background: #f7f8f9;
+    font: inherit;
+  }
+
+  select { height: 40px; }
+  textarea {
+    height: 84px;
+    min-height: 84px;
+    resize: vertical;
+  }
+
+  .choice-box {
+    min-height: 68px;
+    padding: 7px 10px;
+    border: 2px solid #bdbdbd;
+  }
+
+  .choice-box label,
+  .check-list label {
+    display: block;
+    margin: 2px 0;
+    font-size: 14px;
+  }
+
+  .choice-box input,
+  .check-list input { margin: 0 4px 0 0; }
+
+  .map-placeholder {
+    height: 320px;
+    overflow: hidden;
+    border: 1px solid #d3dbe3;
+    border-radius: 12px;
+  }
+
+  .board-map { width: 100%; height: 100%; }
+  .leaflet-control-zoom a { color: #333333; }
+
+  .shelter-panel { grid-column: 2; }
+  .mail-panel { grid-column: 3; grid-row: 2 / span 2; }
+  .status-facilities { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-wide { grid-column: 2; }
+
+  .board-actions {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    grid-column: 1 / -1;
+    margin-top: -4px;
+  }
+
+  .home-link {
+    font-size: 17px;
+    color: var(--blue);
+  }
+
+  .home-link::before {
+    content: "⌂";
+    display: inline-block;
+    margin-right: 8px;
+    color: var(--blue);
+    font-size: 43px;
+    line-height: .5;
+    vertical-align: -8px;
+  }
+
+  .submit-button {
+    min-width: 142px;
+    padding: 10px 30px;
+    border: 0;
+    border-radius: 8px;
+    color: #ffffff;
+    background: var(--blue);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .form-error {
+    grid-column: 1 / -1;
+    padding: 9px 12px;
+    border: 1px solid #d38c8c;
+    color: #a32222;
+    background: #fff4f4;
+  }
+
+  .notice-list {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #e3e8ed;
+  }
+
+  .notice-list h3 { margin: 0 0 10px; color: var(--blue); font-size: 18px; }
+  .notice-list article { padding: 9px 0; border-bottom: 1px solid #e1e4e5; }
+  .notice-list p { margin: 3px 0; }
+  .notice-meta { color: #667078; font-size: 13px; }
+
+  @media (max-width: 700px) {
+    .board-page .app-header { height: 58px; padding: 0 20px; }
+    .board-page .app-header h1 { font-size: 22px; }
+    .board-page .app-nav { top: 58px; right: 20px; }
+    .board-page main { width: calc(100% - 24px); margin-top: 16px; }
+    .board-frame { padding: 18px; }
+    .board-form { grid-template-columns: 1fr; gap: 18px; }
+    .shelter-panel,
+    .mail-panel,
+    .form-wide,
+    .board-actions { grid-column: 1; grid-row: auto; }
+    .status-facilities { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .map-placeholder { height: 280px; }
+    .board-actions { align-items: stretch; flex-direction: column-reverse; gap: 22px; }
+    .submit-button { width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block body_class %}board-page{% endblock %}
+
+{% block content %}
+<div class="board-shell">
+  <section class="board-frame">
+    <h2 class="board-heading">指示・発信</h2>
+
+    <form class="board-form" method="post">
+      {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+      <div>
+        <label class="field-label" for="target">▼ 選択してください（対象）</label>
+        <select id="target" name="target" required>
+          <option value="">選択してください</option>
+          <option value="住民">市民向け</option>
+          <option value="防災課">市職員向け</option>
+          <option value="全員">全員向け</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="field-label" for="disaster_type">▼ 選択してください（災害の種類）</label>
+        <select id="disaster_type" name="disaster_type">
+          <option value="">選択してください</option>
+          <option>津波</option>
+          <option>河川氾濫</option>
+          <option>道路寸断</option>
+          <option>土砂崩れ</option>
+          <option>避難勧告</option>
+          <option>警告</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="field-label" for="district">▼ 選択してください（地区）</label>
+        <select id="district" name="district">
+          <option value="">選択してください</option>
+          <option>青森地区</option>
+          <option>浪岡地区</option>
+          <option>〇〇地区</option>
+        </select>
+      </div>
+
+      <div class="map-placeholder" aria-label="{{ area_name }}の地図">
+        <div id="boardMap" class="board-map"></div>
+      </div>
+
+      <div class="shelter-panel">
+        <span class="field-label">○ 避難所情報を更新する</span>
+        <select name="shelter" aria-label="避難所">
+          <option value="">▼ 選択してください（避難所）</option>
+          {% for shelter in shelters %}<option value="{{ shelter.name }}">{{ shelter.name }}</option>{% endfor %}
+        </select>
+        <div class="status-facilities">
+          <div class="check-list">
+            <span class="field-label">混雑状況</span>
+            <label><input type="radio" name="status" value="混雑" checked>混雑</label>
+            <label><input type="radio" name="status" value="やや混雑">やや混雑</label>
+            <label><input type="radio" name="status" value="やや空いている">やや空いている</label>
+            <label><input type="radio" name="status" value="空いている">空いている</label>
+          </div>
+          <div class="check-list">
+            <span class="field-label">施設情報</span>
+            <label><input type="checkbox" name="facility" value="ペット可">ペット可</label>
+            <label><input type="checkbox" name="facility" value="障害者トイレ">障害者トイレ</label>
+            <label><input type="checkbox" name="facility" value="ベビー室">ベビー室</label>
+          </div>
+        </div>
+        <label class="field-label" for="note">備考欄</label>
+        <textarea id="note" name="note" class="notes-area"></textarea>
+        <label for="attachment">＋ファイルアップロード</label>
+        <input id="attachment" type="file" name="attachment" hidden>
+      </div>
+
+      <div class="mail-panel">
+        <span class="field-label">○ メール配信をする</span>
+        <input type="text" name="email_subject" placeholder="配信タイトルを入力">
+        <textarea name="email_body" class="mail-body" placeholder="本文"></textarea>
+      </div>
+
+      <div class="form-wide">
+        <label class="field-label" for="content">発信内容</label>
+        <textarea id="content" name="content" rows="3" placeholder="指示・発信する内容を入力" required></textarea>
+      </div>
+
+      <div class="board-actions">
+        <a class="home-link" href="{{ url_for('index') }}">ホームへ戻る</a>
+        <button class="submit-button" type="submit">送信</button>
+      </div>
+    </form>
+
+    {% if instructions %}
+    <div class="notice-list">
+      <h3>最近の発信</h3>
+      {% for inst in instructions[:3] %}
+      <article>
+        <p>{{ inst.content }}{% if inst.shelter %}（避難先: {{ inst.shelter }}）{% endif %}</p>
+        <span class="notice-meta">{{ inst.created_at }} / {{ inst.status }}</span>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const map = L.map('boardMap').setView([
+    {{ area_latitude }},
+    {{ area_longitude }}
+  ], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  L.marker([{{ area_latitude }}, {{ area_longitude }}])
+    .addTo(map)
+    .bindPopup('{{ area_name }}')
+    .openPopup();
+});
+</script>
 {% endblock %}

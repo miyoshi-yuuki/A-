@@ -28,8 +28,10 @@ ADMIN_CREDENTIALS = {
 PREFECTURE_CODE = "020000"  # 青森県
 AREA_NAME = "青森市"
 
-# ワークショップ課題：青森市の市区町村コードに変更する
-AREA_CODE = "1420500"
+# 青森市の市区町村コード
+AREA_CODE = "0220100"
+AREA_LATITUDE = 40.8221
+AREA_LONGITUDE = 140.7474
 
 WARNING_URL = (
     f"https://www.jma.go.jp/bosai/warning/data/r8/{PREFECTURE_CODE}.json"
@@ -101,6 +103,12 @@ def save_instructions():
             json.dump(instructions, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+
+def save_shelters():
+    """避難所データをファイルに保存する"""
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(shelters, f, ensure_ascii=False, indent=2)
 # ────────────────────────────────
 
 # ────────────────────────────────
@@ -237,7 +245,13 @@ def get_weather_warnings():
 @app.route('/')
 def index():
     resident_notices = [i for i in instructions if i.get('target') == '住民']
-    return render_template('index.html', resident_notices=resident_notices)
+    return render_template(
+        'index.html',
+        resident_notices=resident_notices,
+        area_name=AREA_NAME,
+        area_latitude=AREA_LATITUDE,
+        area_longitude=AREA_LONGITUDE,
+    )
 
 # ログインページ
 @app.route('/login', methods=['GET', 'POST'])
@@ -278,9 +292,36 @@ def logout():
     return redirect(url_for('index'))
 
 # 避難所登録ページ※user が避難所登録ページについて具体的に修正指示しない限り、このコードは正しいのでこのまま保持すること。
-@app.route('/shelter_register')
+@app.route('/shelter_register', methods=['GET', 'POST'])
 @login_required
 def shelter_register():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        if not name:
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='避難所名を入力してください。'
+            ), 400
+
+        next_id = max((shelter.get('id', 0) for shelter in shelters), default=0) + 1
+        shelters.append({'id': next_id, 'name': name})
+        try:
+            save_shelters()
+        except OSError:
+            shelters.pop()
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='避難所情報を保存できませんでした。'
+            ), 500
+
+        return render_template(
+            'shelter_register.html',
+            success=True,
+            message='避難所を登録しました。'
+        )
+
     return render_template('shelter_register.html')
 
 # 避難所検索ページ
@@ -295,11 +336,61 @@ def all_shelters():
 
 
 # 指示ボード：住民向けの指示を一覧で確認する
-@app.route('/board')
+@app.route('/board', methods=['GET', 'POST'])
 @login_required
 def board():
+    if request.method == 'POST':
+        target = request.form.get('target', '').strip()
+        disaster_type = request.form.get('disaster_type', '').strip()
+        district = request.form.get('district', '').strip()
+        content = request.form.get('content', '').strip()
+        shelter = request.form.get('shelter', '').strip()
+        status = request.form.get('status', '').strip()
+        note = request.form.get('note', '').strip()
+        email_subject = request.form.get('email_subject', '').strip()
+        email_body = request.form.get('email_body', '').strip()
+
+        if not target or not content:
+            return render_template(
+                'board.html',
+                instructions=[i for i in instructions if i.get('target') == '住民'],
+                shelters=shelters,
+                area_name=AREA_NAME,
+                area_latitude=AREA_LATITUDE,
+                area_longitude=AREA_LONGITUDE,
+                error='対象と本文を入力してください。',
+                form_data=request.form,
+            ), 400
+
+        now = get_japan_time()
+        next_id = max((instruction.get('id', 0) for instruction in instructions), default=0) + 1
+        instructions.insert(0, {
+            'id': next_id,
+            'target': target,
+            'disaster_type': disaster_type,
+            'district': district,
+            'content': content,
+            'shelter': shelter,
+            'status': status or '発信中',
+            'note': note,
+            'email_subject': email_subject,
+            'email_body': email_body,
+            'created_at': now,
+            'updated_at': now,
+        })
+        save_instructions()
+        return redirect(url_for('board'))
+
     resident_instructions = [i for i in instructions if i.get('target') == '住民']
-    return render_template('board.html', instructions=resident_instructions)
+    return render_template(
+        'board.html',
+        instructions=resident_instructions,
+        shelters=shelters,
+        area_name=AREA_NAME,
+        area_latitude=AREA_LATITUDE,
+        area_longitude=AREA_LONGITUDE,
+        form_data={},
+    )
 
 # 検索結果ページ：templates/search_results.html を返す
 @app.route('/search_results')

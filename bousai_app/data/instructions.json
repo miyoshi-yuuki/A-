@@ -1,5 +1,19 @@
 [
   {
+    "id": 5,
+    "target": "住民",
+    "disaster_type": "津波",
+    "district": "青森地区",
+    "content": "テスト発信",
+    "shelter": "",
+    "status": "発信中",
+    "note": "",
+    "email_subject": "",
+    "email_body": "",
+    "created_at": "2026年09月09日 16:15",
+    "updated_at": "2026年09月09日 16:15"
+  },
+  {
     "id": 4,
     "target": "住民",
     "content": "B避難所へ避難してください",

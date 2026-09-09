@@ -4,31 +4,40 @@
   <meta charset="utf-8">
   <title>{% block title %}防災アプリ{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {% block head %}{% endblock %}
 </head>
-<body>
-  <!-- ヘッダー -->
-  <h1>防災アプリ</h1>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="app-header">
+    <h1>防災アプリ</h1>
+    <button class="menu-button" type="button" aria-label="メニューを開く" aria-expanded="false">☰</button>
+  </header>
 
-  <!-- ナビゲーション -->
-  <nav>
-    <a href="/">ホーム</a> |
-    <a href="/shelter_search">避難所検索</a> |
-    <a href="/shelter_register">避難所登録</a> |
-    <a href="/board">指示・発信ボード</a>
+  <nav class="app-nav">
+    <a href="{{ url_for('index') }}">ホーム</a> |
+    <a href="{{ url_for('shelter_search') }}">避難所検索</a> |
+    <a href="{{ url_for('shelter_register') }}">避難所登録</a> |
+    <a href="{{ url_for('board') }}">指示・発信ボード</a>
     ｜
     {% if session.logged_in %}
       ログイン中{% if session.username %}（{{ session.username }}）{% endif %}
-      <a href="/logout">ログアウト</a>
+      <a href="{{ url_for('logout') }}">ログアウト</a>
     {% else %}
       未ログイン
-      <a href="/login">ログイン</a>
+      <a href="{{ url_for('login') }}">ログイン</a>
     {% endif %}
   </nav>
-  <hr>
 
   <main>
     <!-- ここに子テンプレートの content が入る -->
     {% block content %}{% endblock %}
   </main>
+  <script>
+    document.querySelector('.menu-button').addEventListener('click', function () {
+      const navigation = document.querySelector('.app-nav');
+      const expanded = this.getAttribute('aria-expanded') === 'true';
+      this.setAttribute('aria-expanded', String(!expanded));
+      navigation.classList.toggle('is-open', !expanded);
+    });
+  </script>
 </body>
 </html>
