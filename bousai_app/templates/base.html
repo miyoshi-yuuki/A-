@@ -7,9 +7,10 @@
   <style>
     :root { --font-scale: 1; }
     body { zoom: var(--font-scale); }
-    .accessibility-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px 16px; padding: 8px max(20px, calc((100% - 1390px) / 2)); color: #304052; background: #eef3f8; font-size: 14px; }
-    .accessibility-bar label { font-weight: 700; }
-    .accessibility-bar select { min-height: 34px; border: 1px solid #aebdca; border-radius: 6px; padding: 4px 8px; color: #304052; background: #fff; font: inherit; }
+    .accessibility-bar { display: flex; width: 100%; min-height: 50px; box-sizing: border-box; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; margin: 0; padding: 8px max(20px, calc((100% - 1390px) / 2)); color: #304052; background: #eef3f8; font-size: 14px; line-height: 1.4; }
+    .accessibility-bar label { display: inline-flex; align-items: center; min-height: 34px; margin: 0; font-weight: 700; white-space: nowrap; }
+    .accessibility-bar select { flex: 0 0 auto; min-width: 58px; min-height: 34px; border: 1px solid #aebdca; border-radius: 6px; padding: 4px 8px; color: #304052; background: #fff; font: inherit; line-height: 1.4; }
+    .accessibility-bar #language-setting { min-width: 86px; }
     @media (max-width: 620px) { .accessibility-bar { justify-content: center; padding: 8px 12px; } }
   </style>
   {% block head %}{% endblock %}
@@ -94,7 +95,12 @@
     languageSelect.addEventListener('change', function () { if (fixedJapanese) { this.value = 'ja'; translatePage('ja'); return; } const value = languages.includes(this.value) ? this.value : 'ja'; this.value = value; write(languageKey, value); translatePage(value); });
     const menuButton = document.querySelector('.menu-button'), navigation = document.querySelector('.app-nav');
     menuButton.addEventListener('click', function () { const expanded = this.getAttribute('aria-expanded') === 'true'; const nextLabel = !expanded ? 'メニューを閉じる' : 'メニューを開く'; this.setAttribute('aria-expanded', String(!expanded)); this.setAttribute('aria-label', translate(nextLabel, document.documentElement.lang)); navigation.classList.toggle('is-open', !expanded); });
-    const observer = new MutationObserver(function (mutations) { if (mutations.some(function (mutation) { return mutation.addedNodes.length; })) translatePage(document.documentElement.lang); });
+    const observer = new MutationObserver(function (mutations) {
+      if (!mutations.some(function (mutation) { return mutation.addedNodes.length; })) return;
+      observer.disconnect();
+      translatePage(document.documentElement.lang);
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
     observer.observe(document.body, { childList: true, subtree: true });
   }());
   </script>

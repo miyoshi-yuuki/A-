@@ -15,7 +15,7 @@
   .refine-forms { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .refine-form { display: flex; align-items: end; gap: 10px; }
   .refine-form .field { flex: 1; } label { display: block; margin-bottom: 6px; font-weight: 700; }
-  input { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
+  .results-card input { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
   button, a.back-link, .suggestion-link { border: 0; border-radius: 7px; padding: 10px 16px; color: #fff; background: var(--blue); font: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
   button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #8db9f5; outline-offset: 2px; }
   .condition { margin: 0 0 18px; color: #687582; }
@@ -24,7 +24,9 @@
   .suggestion-link { display: inline-block; margin: 4px 0; padding: 6px 10px; font-size: 14px; }
   .result-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr); gap: 22px; padding: 22px 0; border-top: 1px solid #e2e7eb; }
   .result-item:first-of-type { border-top: 0; }
+  .result-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .result-name { margin: 0 0 12px; color: var(--blue); font-size: 23px; }
+  .edit-link { flex: 0 0 auto; margin-bottom: 12px; padding: 6px 10px; border: 1px solid var(--blue); border-radius: 6px; color: var(--blue); font-size: 14px; text-decoration: none; }
   .detail-grid { display: grid; grid-template-columns: 125px 1fr; gap: 8px 12px; margin: 0; }
   .detail-grid dt { font-weight: 700; } .detail-grid dd { margin: 0; overflow-wrap: anywhere; }
   .disaster-tag { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 7px; border-radius: 4px; color: #24539c; background: #e7f0fb; font-size: 13px; }
@@ -65,13 +67,13 @@
     {% for shelter in results %}
     <article class="result-item">
       <div>
-        <h2 class="result-name">{{ shelter.display_name }}</h2>
+        <div class="result-heading"><h2 class="result-name">{{ shelter.display_name }}</h2><a class="edit-link" href="{{ url_for('shelter_edit', shelter_id=shelter.id) }}">編集</a></div>
         <div class="facility-image">
           {% if shelter.display_image %}<img src="{{ shelter.display_image }}" alt="{{ shelter.display_name }}の施設画像">{% else %}施設画像未登録{% endif %}
         </div>
         <dl class="detail-grid">
           <dt>開設状況</dt><dd>{{ shelter.display_open_status }}</dd>
-          <dt>災害種別</dt><dd>{% if shelter.display_disaster_types is string %}<span class="disaster-tag">{{ shelter.display_disaster_types }}</span>{% elif shelter.display_disaster_types %}{% for disaster in shelter.display_disaster_types %}<span class="disaster-tag">{{ disaster }}</span>{% endfor %}{% else %}未登録{% endif %}</dd>
+          <dt>災害種別</dt><dd>{% if shelter.display_disaster_types %}{% for disaster in shelter.display_disaster_types %}<span class="disaster-tag">{{ disaster_options.get(disaster, '') }} {{ disaster }}</span>{% endfor %}{% else %}対応災害未登録{% endif %}</dd>
           <dt>郵便番号</dt><dd>{{ shelter.display_postal_code }}</dd>
           <dt>住所</dt><dd>{{ shelter.display_address }}</dd>
           <dt>施設情報</dt><dd>{{ shelter.display_facility_info }}</dd>

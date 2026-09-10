@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
 {% block title %}避難所登録 - 防災アプリ{% endblock %}
-{% block body_class %}shelter-register-page japanese-only{% endblock %}
+{% block body_class %}shelter-register-page{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null; this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';" />
 <style>
   :root { --blue: #2c5eae; --ink: #51606e; --border: #d3dbe3; --page-width: 1100px; }
   * { box-sizing: border-box; }
@@ -38,12 +38,14 @@
   .history-time { color: #687582; font-size: 13px; white-space: nowrap; }
   .form-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; }
   .home-link { color: var(--blue); background: transparent; padding-left: 0; }
+  .status-option { display: inline-flex; align-items: center; gap: 6px; margin-right: 18px; font-weight: 400; }
+  .disaster-option { display: inline-flex; align-items: center; gap: 5px; min-width: 120px; margin: 3px 12px 3px 0; font-weight: 400; }
   @media (max-width: 760px) { main { width: calc(100% - 24px); margin-top: 16px; } .register-grid { grid-template-columns: 1fr; gap: 16px; } .register-card { padding: 19px; } .address-row, .form-actions { align-items: stretch; flex-direction: column; } .address-row button, .form-actions button { width: 100%; } #registerMap { height: 300px; } .history-item { align-items: flex-start; flex-direction: column; gap: 3px; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<h1 class="register-title">避難所登録</h1>
+<h1 class="register-title">{{ '避難所編集' if form_data.get('id') else '避難所登録' }}</h1>
 <p class="register-description">施設情報を入力し、住所を検索して地図上の位置を確認してください。</p>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 {% if success %}<p class="success" role="status">登録が完了しました。</p>{% endif %}
@@ -56,11 +58,13 @@
       <div class="field"><label for="address">住所（必須）</label><div class="address-row"><input id="address" name="address" type="text" value="{{ form_data.get('address', '') }}" required><button id="geocodeButton" type="button">住所を地図で確認</button></div><p id="geocodeStatus" class="geocode-status" role="status"></p></div>
       <div class="field"><label for="phone">避難所連絡先（必須）</label><input id="phone" name="phone" type="tel" value="{{ form_data.get('phone', '') }}" required></div>
       <div class="field"><label for="capacity">収容人数（任意）</label><input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.get('capacity', '') }}"></div>
+      <fieldset><legend>開設状況</legend><div class="checks">{% for value, label in open_status_options.items() %}<label class="status-option"><input type="radio" name="open_status" value="{{ value }}" {% if form_data.get('open_status', 'closed') == value %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
+      <fieldset><legend>対応災害（複数選択可）</legend><div class="checks">{% for option, icon in disaster_options.items() %}<label class="disaster-option"><input type="checkbox" name="disaster_types" value="{{ option }}" {% if option in selected_disaster_types %}checked{% endif %}>{{ icon }} {{ option }}</label>{% endfor %}</div></fieldset>
       <fieldset><legend>設備（任意）</legend><div class="checks">{% for option in ['トイレ', '多目的トイレ', 'Wi-Fi', '電源', '車椅子対応'] %}<label><input type="checkbox" name="equipment" value="{{ option }}" {% if option in selected_equipment %}checked{% endif %}>{{ option }}</label>{% endfor %}</div></fieldset>
       <fieldset><legend>ペット（任意）</legend><div class="checks">{% for option in ['可', '不可', '専用スペースあり'] %}<label><input type="checkbox" name="pets" value="{{ option }}" {% if option in selected_pets %}checked{% endif %}>{{ option }}</label>{% endfor %}</div></fieldset>
       <div class="field"><label for="remarks">備考（任意）</label><textarea id="remarks" name="remarks">{{ form_data.get('remarks', '') }}</textarea></div>
       <input id="latitude" name="latitude" type="hidden" value="{{ form_data.get('latitude', '') }}"><input id="longitude" name="longitude" type="hidden" value="{{ form_data.get('longitude', '') }}">
-      <div class="form-actions"><a class="home-link" href="{{ url_for('index') }}">⌂ ホームに戻る</a><button type="submit">避難所を登録</button></div>
+      <div class="form-actions"><a class="home-link" href="{{ url_for('index') }}">⌂ ホームに戻る</a><button type="submit">{{ '変更を保存' if form_data.get('id') else '避難所を登録' }}</button></div>
     </form>
   </section>
 
@@ -68,29 +72,47 @@
     <h2>登録地点</h2>
     <div id="registerMap" aria-label="避難所の登録地点を確認する地図"></div>
     <div class="field" style="margin-top: 20px;"><label for="image">施設の画像（任意）</label><input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" multiple form="shelterForm"><p class="file-note">JPG、JPEG、PNG、GIF、WEBP。1ファイル5MB以下。</p></div>
-    <div class="history"><h2>登録情報履歴</h2>{% if registration_history %}<ul class="history-list">{% for shelter in registration_history %}<li class="history-item"><span>{{ shelter.name or '名称未設定' }}</span><span class="history-time">{{ format_registered_at(shelter.registered_at) }}</span></li>{% endfor %}</ul>{% else %}<p>登録情報はありません。</p>{% endif %}</div>
+    <div class="history"><h2>登録情報履歴</h2>{% if registration_history %}<ul class="history-list">{% for shelter in registration_history %}<li class="history-item"><span><a href="{{ url_for('shelter_edit', shelter_id=shelter.id) }}">{{ shelter.name or '名称未設定' }}</a></span><span class="history-time">{{ format_registered_at(shelter.registered_at) }}</span></li>{% endfor %}</ul>{% else %}<p>登録情報はありません。</p>{% endif %}</div>
   </section>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="this.onerror=null; this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const center = [{{ map_latitude }}, {{ map_longitude }}];
-  const map = L.map('registerMap').setView(center, 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
-  let marker;
   const nameInput = document.getElementById('name');
   const addressInput = document.getElementById('address');
   const latitudeInput = document.getElementById('latitude');
   const longitudeInput = document.getElementById('longitude');
   const status = document.getElementById('geocodeStatus');
   const button = document.getElementById('geocodeButton');
+  let map = null;
+  let marker;
+  let selectedCenter = center;
+  try {
+    if (!window.L) throw new Error('Leafletが読み込まれていません');
+    map = L.map('registerMap', { center: center, zoom: 16 }).setView(center, 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+    setTimeout(function () { map.invalidateSize(); map.setView(selectedCenter, 16); }, 100);
+  } catch (error) {
+    status.textContent = '地図を読み込めませんでした。ページを再読み込みしてください。';
+    document.getElementById('registerMap').textContent = '地図を読み込めませんでした。ネットワーク接続を確認してください。';
+    console.error('登録地点マップを初期化できませんでした。', error);
+  }
+  function escapeHTML(value) { return String(value || '').replace(/[&<>"']/g, function (character) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]; }); }
   function showMarker(latitude, longitude, label) {
+    if (!map) return;
+    selectedCenter = [latitude, longitude];
     if (marker) marker.remove();
-    marker = L.marker([latitude, longitude]).addTo(map).bindPopup(label).openPopup();
+    marker = L.marker([latitude, longitude]).addTo(map).bindPopup(escapeHTML(label)).openPopup();
     map.setView([latitude, longitude], 16);
   }
-  if (Number.isFinite(Number(latitudeInput.value)) && Number.isFinite(Number(longitudeInput.value))) showMarker(Number(latitudeInput.value), Number(longitudeInput.value), nameInput.value || addressInput.value);
+  const hasFormCoordinates = Number.isFinite(Number(latitudeInput.value)) && Number.isFinite(Number(longitudeInput.value));
+  if (hasFormCoordinates) {
+    showMarker(Number(latitudeInput.value), Number(longitudeInput.value), nameInput.value || addressInput.value);
+  } else {
+    showMarker(center[0], center[1], '青森駅');
+  }
   addressInput.addEventListener('input', function () { latitudeInput.value = ''; longitudeInput.value = ''; });
   button.addEventListener('click', function () {
     const address = addressInput.value.trim();

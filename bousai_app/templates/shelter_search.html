@@ -4,6 +4,7 @@
 {% block body_class %}shelter-search-page{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root { --blue: #2c5eae; --ink: #51606e; --border: #d3dbe3; --page-width: 880px; }
   * { box-sizing: border-box; }
@@ -16,7 +17,7 @@
   .search-row { display: flex; align-items: end; gap: 12px; }
   .field { flex: 1; }
   label { display: block; margin-bottom: 6px; font-weight: 700; }
-  input, select { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
+  .search-card input, .search-card select { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
   button, .all-link { display: inline-block; border: 0; border-radius: 7px; padding: 10px 18px; color: #fff; background: var(--blue); font: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
   button:hover, .all-link:hover { background: #214b91; }
   button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #8db9f5; outline-offset: 2px; }
@@ -25,6 +26,14 @@
   .history-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e2e7eb; }
   .history-item:last-child { border-bottom: 0; }
   .history-item button { padding: 5px 10px; color: #b3261e; background: #fff; border: 1px solid #d6a3a0; font-size: 13px; }
+  .search-map { height: 360px; overflow: hidden; border-radius: 10px; }
+  .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+  .location-button { border: 1px solid var(--blue); color: var(--blue); background: #fff; }
+  .location-status { min-height: 1.5em; margin: 0; color: #24539c; font-size: 13px; }
+  .nearby-list { margin: 14px 0 0; padding: 0; list-style: none; }
+  .nearby-item { padding: 12px 0; border-top: 1px solid #e2e7eb; }
+  .nearby-item strong { color: var(--blue); }
+  .disaster-tag { display: inline-block; margin: 3px 4px 0 0; padding: 2px 6px; border-radius: 4px; color: #24539c; background: #e7f0fb; font-size: 12px; }
   @media (max-width: 620px) {
     main { width: calc(100% - 24px); margin-top: 16px; }
     .search-card { padding: 19px; }
@@ -62,6 +71,13 @@
 </section>
 
 <section class="search-card">
+  <h2>周辺の避難所</h2>
+  <div id="searchMap" class="search-map" aria-label="現在地周辺の避難所地図"></div>
+  <div class="map-tools"><button id="searchLocationButton" class="location-button" type="button">現在地を取得</button><p id="searchLocationStatus" class="location-status" role="status">現在地取得前です。青森市中心部から表示しています。</p></div>
+  <ul id="nearbyList" class="nearby-list"></ul>
+</section>
+
+<section class="search-card">
   <h2>今まで調べた履歴</h2>
   <ul id="historyList" class="history-list">
     {% for name in ['御所見小学校', '片瀬小学校', '鵠洋小学校'] %}
@@ -70,9 +86,67 @@
   </ul>
 </section>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-document.querySelectorAll('.delete-history').forEach(function (button) {
-  button.addEventListener('click', function () { button.closest('.history-item').remove(); });
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.delete-history').forEach(function (button) {
+    button.addEventListener('click', function () { button.closest('.history-item').remove(); });
+  });
+  const shelters = {{ shelters|tojson }};
+  const disasterIcons = {{ disaster_options|tojson }};
+  const center = [{{ map_latitude }}, {{ map_longitude }}];
+  const mapElement = document.getElementById('searchMap');
+  const list = document.getElementById('nearbyList');
+  const status = document.getElementById('searchLocationStatus');
+  const button = document.getElementById('searchLocationButton');
+  const markers = [];
+  let map;
+  let currentMarker;
+  function escapeHTML(value) { return String(value || '').replace(/[&<>"']/g, function (character) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]; }); }
+  function distanceMeters(from, to) {
+    const radius = 6371000, lat1 = from[0] * Math.PI / 180, lat2 = to[0] * Math.PI / 180;
+    const deltaLat = (to[0] - from[0]) * Math.PI / 180, deltaLng = (to[1] - from[1]) * Math.PI / 180;
+    const a = Math.sin(deltaLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+    return 2 * radius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  function formatDistance(meters) { return meters >= 1000 ? (meters / 1000).toFixed(1) + 'km' : Math.round(meters) + 'm'; }
+  function disasterHTML(types) { return (types || []).map(function (type) { return '<span class="disaster-tag">' + escapeHTML(disasterIcons[type] || '') + ' ' + escapeHTML(type) + '</span>'; }).join('') || '<span>対応災害未登録</span>'; }
+  function renderNearby(origin) {
+    const nearby = shelters.map(function (shelter) {
+      const lat = Number(shelter.lat), lng = Number(shelter.lng);
+      return { shelter: shelter, distance: Number.isFinite(lat) && Number.isFinite(lng) ? distanceMeters(origin, [lat, lng]) : null };
+    }).filter(function (item) { return item.distance !== null; }).sort(function (left, right) { return left.distance - right.distance; });
+    list.innerHTML = nearby.length ? nearby.map(function (item) {
+      const shelter = item.shelter;
+      return '<li class="nearby-item"><strong>' + escapeHTML(shelter.name || '名称未設定') + '</strong> / ' + formatDistance(item.distance) + '<br>開設状況: ' + escapeHTML(shelter.display_open_status || '開設されていません') + '<br>' + disasterHTML(shelter.disaster_types) + '</li>';
+    }).join('') : '<li>位置情報のある避難所はありません。</li>';
+  }
+  try {
+    if (!window.L) throw new Error('Leaflet is unavailable');
+    map = L.map(mapElement).setView(center, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+    shelters.forEach(function (shelter) {
+      const lat = Number(shelter.lat), lng = Number(shelter.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+      const marker = L.marker([lat, lng]).addTo(map).bindPopup('<strong>' + escapeHTML(shelter.name || '名称未設定') + '</strong><br>開設状況: ' + escapeHTML(shelter.display_open_status || '開設されていません') + '<br>' + disasterHTML(shelter.disaster_types));
+      markers.push(marker);
+    });
+    renderNearby(center);
+  } catch (error) {
+    status.textContent = '地図を読み込めませんでした。避難所の検索は利用できます。';
+    renderNearby(center);
+  }
+  button.addEventListener('click', function () {
+    status.textContent = '現在地を取得しています...';
+    if (!navigator.geolocation) { status.textContent = 'このブラウザは位置情報に対応していません。'; return; }
+    navigator.geolocation.getCurrentPosition(function (position) {
+      const point = [position.coords.latitude, position.coords.longitude];
+      if (currentMarker) currentMarker.remove();
+      if (map) { currentMarker = L.circleMarker(point, { radius: 10, color: '#1453a6', fillColor: '#2f80ed', fillOpacity: 1, weight: 3 }).addTo(map).bindPopup('現在地').openPopup(); map.setView(point, 13); }
+      renderNearby(point);
+      status.textContent = '現在地を表示し、距離の近い順に並べました。';
+    }, function (error) { status.textContent = error.code === 1 ? '位置情報の利用が拒否されました。青森市中心部から確認できます。' : '現在地を取得できませんでした。青森市中心部から確認できます。'; });
+  });
 });
 </script>
 {% endblock %}

@@ -25,5 +25,29 @@
     "address": "青森県青森市西町3丁目",
     "latitude": 40.8354,
     "longitude": 140.7376
+  },
+  {
+    "id": 6,
+    "name": "青森山田高校",
+    "address": "青森県青森市青葉3丁目13-40",
+    "phone": "108888888",
+    "capacity": 100,
+    "equipment": [
+      "多目的トイレ"
+    ],
+    "pets": [
+      "不可"
+    ],
+    "disaster_types": [
+      "津波",
+      "洪水",
+      "地震"
+    ],
+    "open_status": "closed",
+    "remarks": "",
+    "latitude": null,
+    "longitude": null,
+    "images": [],
+    "registered_at": "2026-09-10T13:11:51+09:00"
   }
 ]

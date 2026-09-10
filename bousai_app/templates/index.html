@@ -17,11 +17,19 @@
   .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; color: var(--blue); font-size: 22px; }
   .section-heading small { color: #687582; font-size: 13px; font-weight: 400; }
   #shelterMap { height: 330px; overflow: hidden; border-radius: 12px; }
+  .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+  .location-button { border: 1px solid #2c5eae; border-radius: 7px; padding: 8px 12px; color: #24539c; background: #fff; font: inherit; cursor: pointer; }
+  .location-status { min-height: 1.5em; margin: 0; color: #24539c; font-size: 13px; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 10px 0 0; color: #51606e; font-size: 13px; }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; background: #2f80ed; }
+  .legend-dot.open { background: #1f9d4a; }
+  .legend-dot.closed { background: #7b8794; }
   .notice-list { margin: 0; padding: 0; list-style: none; }
   .notice-item { padding: 12px 0; border-bottom: 1px solid #e2e7eb; }
   .notice-item:first-child { padding-top: 0; }
   .notice-item:last-child { border-bottom: 0; }
-  .notice-item.important { color: #c62828; font-weight: 700; }
+  .notice-item.important { padding-left: 10px; border-left: 4px solid #b3261e; color: #8d1f1b; background: #fff1f0; font-weight: 700; }
   .notice-item p { margin: 5px 0; }
   .notice-meta { color: #687582; font-size: 13px; font-weight: 400; }
   .important-label { margin-right: 6px; font-size: 12px; }
@@ -53,6 +61,8 @@
   <section class="home-card">
     <h3 class="section-heading">避難所マップ <small>{{ area_name }}</small></h3>
     <div id="shelterMap" aria-label="{{ area_name }}周辺の避難所地図"></div>
+    <div class="map-tools"><button id="homeLocationButton" class="location-button" type="button">現在地を取得</button><p id="homeLocationStatus" class="location-status" role="status">現在地取得前です。地図は青森市中心部から利用できます。</p></div>
+    <div class="map-legend" aria-label="地図の凡例"><span class="legend-item"><span class="legend-dot"></span>現在地</span><span class="legend-item"><span class="legend-dot open"></span>開設中</span><span class="legend-item"><span class="legend-dot closed"></span>開設されていません</span></div>
   </section>
 
   <section class="home-card">
@@ -60,8 +70,8 @@
     <ul id="notices" class="notice-list">
       {% if resident_notices %}
         {% for notice in resident_notices %}
-        <li class="notice-item {% if notice.get('priority', 1)|int >= 3 %}important{% endif %}" data-notice-index="{{ loop.index0 }}">
-          {% if notice.get('priority', 1)|int >= 3 %}<span class="important-label">重要</span>{% endif %}
+        <li class="notice-item {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}important{% endif %}" data-notice-index="{{ loop.index0 }}" {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}aria-label="重要なお知らせ"{% endif %}>
+          {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}<span class="important-label">重要</span>{% endif %}
           {{ notice.content }}{% if notice.shelter %}（避難先: {{ notice.shelter }}）{% endif %}
           <p class="notice-meta">{{ notice.updated_at or notice.created_at }}</p>
         </li>
@@ -80,8 +90,8 @@
     <ul id="board" class="notice-list">
       {% if resident_notices %}
         {% for notice in resident_notices %}
-        <li class="notice-item {% if notice.get('priority', 1)|int >= 3 %}important{% endif %}" data-notice-index="{{ loop.index0 }}">
-          {% if notice.get('priority', 1)|int >= 3 %}<span class="important-label">【重要】</span>{% endif %}
+        <li class="notice-item {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}important{% endif %}" data-notice-index="{{ loop.index0 }}" {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}aria-label="重要なお知らせ"{% endif %}>
+          {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}<span class="important-label">【重要】</span>{% endif %}
           <p>{{ notice.content }}{% if notice.shelter %}（避難先: {{ notice.shelter }}）{% endif %}</p>
           <span class="notice-meta">{{ notice.updated_at or notice.created_at }}</span>
         </li>
@@ -96,19 +106,49 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const areaCenter = [{{ area_latitude }}, {{ area_longitude }}];
-  const currentLocation = [{{ current_location_latitude }}, {{ current_location_longitude }}];
-  const map = L.map('shelterMap').setView(areaCenter, 12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(map);
-  L.circleMarker(currentLocation, { radius: 9, color: '#1d5fd1', fillColor: '#2f80ed', fillOpacity: 1 })
-    .addTo(map).bindPopup('{{ current_location_name }}（現在地）');
-  {% for shelter in shelters %}
-  {% if shelter.lat is not none and shelter.lng is not none %}
-  L.marker([{{ shelter.lat }}, {{ shelter.lng }}], { title: {{ shelter.name|tojson }}, alt: {{ shelter.name|tojson }} })
-    .addTo(map).bindPopup({{ shelter.name|tojson }});
-  {% endif %}
-  {% endfor %}
+  const shelters = {{ shelters|tojson }};
+  const disasterIcons = {{ disaster_options|tojson }};
+  const locationButton = document.getElementById('homeLocationButton');
+  const locationStatus = document.getElementById('homeLocationStatus');
+  let map;
+  let currentMarker;
+  function escapeHTML(value) { return String(value || '').replace(/[&<>"']/g, function (character) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]; }); }
+  try {
+    if (!window.L) throw new Error('Leaflet is unavailable');
+    map = L.map('shelterMap').setView(areaCenter, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    currentMarker = L.circleMarker([{{ current_location_latitude }}, {{ current_location_longitude }}], { radius: 8, color: '#1453a6', fillColor: '#2f80ed', fillOpacity: 1, weight: 3 }).addTo(map).bindPopup({{ current_location_name|tojson }} + '（初期表示）');
+    const bounds = [];
+    shelters.forEach(function (shelter) {
+      const lat = Number(shelter.lat), lng = Number(shelter.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+      const isOpen = shelter.open_status === 'open';
+      const disasterText = (shelter.disaster_types || []).map(function (type) { return (disasterIcons[type] || '') + ' ' + type; }).join('、') || '対応災害未登録';
+      const marker = L.marker([lat, lng]).addTo(map);
+      marker.bindPopup('<strong>' + escapeHTML(shelter.name || '名称未設定') + '</strong><br>開設状況: ' + escapeHTML(shelter.display_open_status || '開設されていません') + '<br>住所: ' + escapeHTML(shelter.address || '住所未登録') + '<br>災害: ' + escapeHTML(disasterText));
+      bounds.push([lat, lng]);
+    });
+    if (bounds.length > 1) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
+  } catch (error) {
+    locationStatus.textContent = '地図を読み込めませんでした。避難所情報は他の画面から確認できます。';
+  }
+
+  locationButton.addEventListener('click', function () {
+    if (!map) return;
+    locationStatus.textContent = '現在地を取得しています...';
+    if (!navigator.geolocation) { locationStatus.textContent = 'このブラウザは位置情報に対応していません。'; return; }
+    navigator.geolocation.getCurrentPosition(function (position) {
+      const point = [position.coords.latitude, position.coords.longitude];
+      if (currentMarker) currentMarker.remove();
+      currentMarker = L.circleMarker(point, { radius: 10, color: '#1453a6', fillColor: '#2f80ed', fillOpacity: 1, weight: 3 }).addTo(map).bindPopup('現在地').openPopup();
+      map.setView(point, 13);
+      locationStatus.textContent = '現在地を地図に表示しました。';
+    }, function (error) {
+      locationStatus.textContent = error.code === 1 ? '位置情報の利用が拒否されました。地図は青森市中心部から利用できます。' : '現在地を取得できませんでした。地図は青森市中心部から利用できます。';
+    });
+  });
 
   document.querySelectorAll('[data-toggle]').forEach(function (button) {
     const list = document.getElementById(button.dataset.toggle);
@@ -122,19 +162,29 @@ document.addEventListener('DOMContentLoaded', function () {
     updateList();
   });
 
+  function escapeWeatherHTML(value) { return String(value || '').replace(/[&<>"']/g, function (character) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]; }); }
   function updateWeatherWarnings() {
-    fetch('{{ url_for('api_weather_warnings') }}')
-      .then(function (response) { return response.json(); })
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, 15000);
+    fetch('{{ url_for('api_weather_warnings') }}', { signal: controller.signal })
+      .then(function (response) {
+        if (!response.ok) throw new Error('Weather API returned ' + response.status);
+        return response.json();
+      })
       .then(function (data) {
+        clearTimeout(timeout);
         const content = document.getElementById('weatherContent');
         if (data.error) { content.innerHTML = '<p>気象情報の取得に失敗しました。</p>'; return; }
         const warnings = data.warnings || [];
         const warningHtml = warnings.length
-          ? '<ul>' + warnings.map(function (warning) { return '<li>' + warning.name + '（' + warning.status + '）</li>'; }).join('') + '</ul>'
+          ? '<ul>' + warnings.map(function (warning) { return '<li>' + escapeWeatherHTML(warning.name) + '（' + escapeWeatherHTML(warning.status) + '）</li>'; }).join('') + '</ul>'
           : '<p class="weather-ok">現在発令している警報・注意報はございません</p>';
-        content.innerHTML = '<p class="weather-area">青森市</p>' + warningHtml + '<p class="weather-meta">' + (data.last_fetch_time || '') + '</p>';
+        content.innerHTML = '<p class="weather-area">' + escapeWeatherHTML(data.area_name || '青森市') + '</p>' + warningHtml + '<p class="weather-meta">' + escapeWeatherHTML(data.last_fetch_time) + '</p>';
       })
-      .catch(function () { document.getElementById('weatherContent').innerHTML = '<p>気象情報の取得に失敗しました。</p>'; });
+      .catch(function () {
+        clearTimeout(timeout);
+        document.getElementById('weatherContent').innerHTML = '<p>気象情報の取得に失敗しました。</p>';
+      });
   }
   updateWeatherWarnings();
   setInterval(updateWeatherWarnings, 600000);
