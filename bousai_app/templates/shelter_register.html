@@ -1,23 +1,107 @@
 {% extends "base.html" %}
 
+{% block title %}避難所登録 - 防災アプリ{% endblock %}
+{% block body_class %}shelter-register-page japanese-only{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root { --blue: #2c5eae; --ink: #51606e; --border: #d3dbe3; --page-width: 1100px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: #f4f7fa; font-family: "Noto Sans JP", "Yu Gothic", sans-serif; }
+  main { width: min(var(--page-width), calc(100% - 40px)); margin: 32px auto 84px; }
+  .register-title { margin: 0 0 8px; color: var(--blue); font-size: 28px; }
+  .register-description { margin: 0 0 24px; }
+  .register-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+  .register-card { min-width: 0; padding: 26px; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: 0 4px 18px rgba(45, 75, 112, .1); }
+  .register-card h2 { margin: 0 0 18px; color: var(--blue); font-size: 21px; }
+  .field { margin-bottom: 16px; }
+  label, legend { display: block; margin-bottom: 6px; font-weight: 700; }
+  input[type="text"], input[type="tel"], input[type="number"], textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 9px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
+  textarea { min-height: 94px; resize: vertical; }
+  fieldset { margin: 0 0 16px; padding: 0; border: 0; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+  .checks label { margin: 0; font-weight: 400; }
+  .address-row { display: flex; gap: 10px; }
+  .address-row input { flex: 1; }
+  button, .home-link { border: 0; border-radius: 7px; padding: 10px 16px; color: #fff; background: var(--blue); font: inherit; text-decoration: none; cursor: pointer; }
+  button:disabled { cursor: wait; opacity: .6; }
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #8db9f5; outline-offset: 2px; }
+  .geocode-status { min-height: 1.5em; margin: 8px 0 0; color: #24539c; font-size: 14px; }
+  .error { margin: 0 0 20px; padding: 10px 12px; border: 1px solid #d38c8c; color: #a32222; background: #fff4f4; }
+  .success { margin: 0 0 20px; padding: 10px 12px; color: #176b35; background: #eaf7ee; }
+  #registerMap { height: 360px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+  .file-note { color: #687582; font-size: 13px; }
+  .history { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e2e7eb; }
+  .history-list { margin: 0; padding: 0; list-style: none; }
+  .history-item { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #e2e7eb; overflow-wrap: anywhere; }
+  .history-time { color: #687582; font-size: 13px; white-space: nowrap; }
+  .form-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; }
+  .home-link { color: var(--blue); background: transparent; padding-left: 0; }
+  @media (max-width: 760px) { main { width: calc(100% - 24px); margin-top: 16px; } .register-grid { grid-template-columns: 1fr; gap: 16px; } .register-card { padding: 19px; } .address-row, .form-actions { align-items: stretch; flex-direction: column; } .address-row button, .form-actions button { width: 100%; } #registerMap { height: 300px; } .history-item { align-items: flex-start; flex-direction: column; gap: 3px; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<h2>避難所登録</h2>
-<p>新しい避難所情報を登録します。</p>
+<h1 class="register-title">避難所登録</h1>
+<p class="register-description">施設情報を入力し、住所を検索して地図上の位置を確認してください。</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if success %}<p class="success" role="status">登録が完了しました。</p>{% endif %}
 
-<!-- 成功・エラーメッセージ表示 -->
-{% if success %}
-  <p>{{ message }}</p>
-{% endif %}
+<div class="register-grid">
+  <section class="register-card">
+    <h2>施設情報</h2>
+    <form id="shelterForm" method="post" enctype="multipart/form-data">
+      <div class="field"><label for="name">避難所名（必須）</label><input id="name" name="name" type="text" value="{{ form_data.get('name', '') }}" required></div>
+      <div class="field"><label for="address">住所（必須）</label><div class="address-row"><input id="address" name="address" type="text" value="{{ form_data.get('address', '') }}" required><button id="geocodeButton" type="button">住所を地図で確認</button></div><p id="geocodeStatus" class="geocode-status" role="status"></p></div>
+      <div class="field"><label for="phone">避難所連絡先（必須）</label><input id="phone" name="phone" type="tel" value="{{ form_data.get('phone', '') }}" required></div>
+      <div class="field"><label for="capacity">収容人数（任意）</label><input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.get('capacity', '') }}"></div>
+      <fieldset><legend>設備（任意）</legend><div class="checks">{% for option in ['トイレ', '多目的トイレ', 'Wi-Fi', '電源', '車椅子対応'] %}<label><input type="checkbox" name="equipment" value="{{ option }}" {% if option in selected_equipment %}checked{% endif %}>{{ option }}</label>{% endfor %}</div></fieldset>
+      <fieldset><legend>ペット（任意）</legend><div class="checks">{% for option in ['可', '不可', '専用スペースあり'] %}<label><input type="checkbox" name="pets" value="{{ option }}" {% if option in selected_pets %}checked{% endif %}>{{ option }}</label>{% endfor %}</div></fieldset>
+      <div class="field"><label for="remarks">備考（任意）</label><textarea id="remarks" name="remarks">{{ form_data.get('remarks', '') }}</textarea></div>
+      <input id="latitude" name="latitude" type="hidden" value="{{ form_data.get('latitude', '') }}"><input id="longitude" name="longitude" type="hidden" value="{{ form_data.get('longitude', '') }}">
+      <div class="form-actions"><a class="home-link" href="{{ url_for('index') }}">⌂ ホームに戻る</a><button type="submit">避難所を登録</button></div>
+    </form>
+  </section>
 
-{% if error %}
-  <p>{{ message }}</p>
-{% endif %}
+  <section class="register-card">
+    <h2>登録地点</h2>
+    <div id="registerMap" aria-label="避難所の登録地点を確認する地図"></div>
+    <div class="field" style="margin-top: 20px;"><label for="image">施設の画像（任意）</label><input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" multiple form="shelterForm"><p class="file-note">JPG、JPEG、PNG、GIF、WEBP。1ファイル5MB以下。</p></div>
+    <div class="history"><h2>登録情報履歴</h2>{% if registration_history %}<ul class="history-list">{% for shelter in registration_history %}<li class="history-item"><span>{{ shelter.name or '名称未設定' }}</span><span class="history-time">{{ format_registered_at(shelter.registered_at) }}</span></li>{% endfor %}</ul>{% else %}<p>登録情報はありません。</p>{% endif %}</div>
+  </section>
+</div>
 
-<form method="POST">
-  <p>
-    <label for="name">避難所名（必須）</label><br>
-    <input type="text" id="name" name="name">
-  </p>
-  <p><button type="submit">登録</button></p>
-</form>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const center = [{{ map_latitude }}, {{ map_longitude }}];
+  const map = L.map('registerMap').setView(center, 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+  let marker;
+  const nameInput = document.getElementById('name');
+  const addressInput = document.getElementById('address');
+  const latitudeInput = document.getElementById('latitude');
+  const longitudeInput = document.getElementById('longitude');
+  const status = document.getElementById('geocodeStatus');
+  const button = document.getElementById('geocodeButton');
+  function showMarker(latitude, longitude, label) {
+    if (marker) marker.remove();
+    marker = L.marker([latitude, longitude]).addTo(map).bindPopup(label).openPopup();
+    map.setView([latitude, longitude], 16);
+  }
+  if (Number.isFinite(Number(latitudeInput.value)) && Number.isFinite(Number(longitudeInput.value))) showMarker(Number(latitudeInput.value), Number(longitudeInput.value), nameInput.value || addressInput.value);
+  addressInput.addEventListener('input', function () { latitudeInput.value = ''; longitudeInput.value = ''; });
+  button.addEventListener('click', function () {
+    const address = addressInput.value.trim();
+    if (!address) { status.textContent = '住所を入力してください。'; return; }
+    button.disabled = true; status.textContent = '住所を検索しています...';
+    fetch('{{ url_for('geocode_address') }}?address=' + encodeURIComponent(address))
+      .then(function (response) { return response.json().then(function (data) { if (!response.ok) throw new Error(data.error); return data; }); })
+      .then(function (data) { latitudeInput.value = data.latitude; longitudeInput.value = data.longitude; showMarker(data.latitude, data.longitude, nameInput.value.trim() || address); status.textContent = '検索結果: ' + data.display_name; })
+      .catch(function (error) { status.textContent = error.message || '住所を地図上で見つけられませんでした。住所を詳しく入力してください。'; })
+      .finally(function () { button.disabled = false; });
+  });
+});
+</script>
 {% endblock %}

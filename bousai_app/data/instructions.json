@@ -1,5 +1,20 @@
 [
   {
+    "id": 6,
+    "target": "住民",
+    "disaster_type": "河川氾濫",
+    "district": "青森地区",
+    "content": "お",
+    "priority": 1,
+    "shelter": "",
+    "status": "混雑",
+    "note": "",
+    "email_subject": "",
+    "email_body": "",
+    "created_at": "2026年09月10日 10:48",
+    "updated_at": "2026年09月10日 10:48"
+  },
+  {
     "id": 5,
     "target": "住民",
     "disaster_type": "津波",

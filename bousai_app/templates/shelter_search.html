@@ -1,8 +1,78 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h2>避難所検索</h2>
-<p>登録されている避難所を確認できます。</p>
+{% block title %}避難所検索 - 防災アプリ{% endblock %}
+{% block body_class %}shelter-search-page{% endblock %}
 
-<p><a href="{{ url_for('all_shelters') }}">全施設一覧</a></p>
+{% block head %}
+<style>
+  :root { --blue: #2c5eae; --ink: #51606e; --border: #d3dbe3; --page-width: 880px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: #f4f7fa; font-family: "Noto Sans JP", "Yu Gothic", sans-serif; }
+  main { width: min(var(--page-width), calc(100% - 40px)); margin: 32px auto 84px; }
+  .search-card { margin-bottom: 20px; padding: 26px; border-radius: 14px; background: #fff; box-shadow: 0 4px 18px rgba(45, 75, 112, .1); }
+  h1 { margin: 0 0 8px; color: var(--blue); font-size: 28px; }
+  h2 { margin: 0 0 18px; color: var(--blue); font-size: 21px; }
+  .description { margin: 0 0 22px; }
+  .search-row { display: flex; align-items: end; gap: 12px; }
+  .field { flex: 1; }
+  label { display: block; margin-bottom: 6px; font-weight: 700; }
+  input, select { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
+  button, .all-link { display: inline-block; border: 0; border-radius: 7px; padding: 10px 18px; color: #fff; background: var(--blue); font: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  button:hover, .all-link:hover { background: #214b91; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #8db9f5; outline-offset: 2px; }
+  .all-link { margin-top: 20px; }
+  .history-list { margin: 0; padding: 0; list-style: none; }
+  .history-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e2e7eb; }
+  .history-item:last-child { border-bottom: 0; }
+  .history-item button { padding: 5px 10px; color: #b3261e; background: #fff; border: 1px solid #d6a3a0; font-size: 13px; }
+  @media (max-width: 620px) {
+    main { width: calc(100% - 24px); margin-top: 16px; }
+    .search-card { padding: 19px; }
+    .search-row { align-items: stretch; flex-direction: column; }
+    .search-row button { width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="search-card">
+  <h1>避難所検索</h1>
+  <p class="description">登録されている避難所を検索できます。</p>
+
+  <form class="search-row" action="{{ url_for('search_results') }}" method="get">
+    <div class="field">
+      <label for="postal_code">住所の7桁で検索</label>
+      <input id="postal_code" name="postal_code" type="text" inputmode="numeric" maxlength="8" placeholder="例: 0300031">
+    </div>
+    <button type="submit">郵便番号で検索</button>
+  </form>
+
+  <form class="search-row" action="{{ url_for('search_results') }}" method="get" style="margin-top: 16px;">
+    <div class="field">
+      <label for="shelter_id">登録施設から選択検索</label>
+      <select id="shelter_id" name="shelter_id">
+        <option value="">選択してください</option>
+        {% for shelter in shelters %}<option value="{{ shelter.id }}">{{ shelter.name or '名称未設定' }}</option>{% endfor %}
+      </select>
+    </div>
+    <button type="submit">施設を検索</button>
+  </form>
+
+  <a class="all-link" href="{{ url_for('all_shelters') }}">全施設一覧</a>
+</section>
+
+<section class="search-card">
+  <h2>今まで調べた履歴</h2>
+  <ul id="historyList" class="history-list">
+    {% for name in ['御所見小学校', '片瀬小学校', '鵠洋小学校'] %}
+    <li class="history-item"><span>{{ name }}</span><button type="button" class="delete-history">削除</button></li>
+    {% endfor %}
+  </ul>
+</section>
+
+<script>
+document.querySelectorAll('.delete-history').forEach(function (button) {
+  button.addEventListener('click', function () { button.closest('.history-item').remove(); });
+});
+</script>
 {% endblock %}

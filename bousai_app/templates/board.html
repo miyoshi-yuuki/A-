@@ -221,7 +221,7 @@
 </style>
 {% endblock %}
 
-{% block body_class %}board-page{% endblock %}
+{% block body_class %}board-page japanese-only{% endblock %}
 
 {% block content %}
 <div class="board-shell">
@@ -251,6 +251,17 @@
           <option>土砂崩れ</option>
           <option>避難勧告</option>
           <option>警告</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="field-label" for="priority">重要度</label>
+        <select id="priority" name="priority">
+          <option value="1">1（通常）</option>
+          <option value="2">2</option>
+          <option value="3">3（重要）</option>
+          <option value="4">4</option>
+          <option value="5">5（最重要）</option>
         </select>
       </div>
 

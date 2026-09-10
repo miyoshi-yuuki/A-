@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}書き込み・通報 - 防災アプリ{% endblock %}
+
+{% block head %}
+<style>
+  .report-page { color: #51606e; background: #f4f7fa; }
+  .report-card { max-width: 720px; margin: 0 auto; padding: 28px; border-radius: 16px; background: #fff; box-shadow: 0 4px 22px rgba(45, 75, 112, .1); }
+  .report-card h2 { margin: 0 0 22px; color: #2c5eae; }
+  .report-field { margin: 0 0 18px; }
+  .report-field label { display: block; margin-bottom: 6px; font-weight: 700; }
+  .report-field input, .report-field select, .report-field textarea { box-sizing: border-box; width: 100%; border: 1px solid #d3dbe3; border-radius: 8px; padding: 10px; color: inherit; background: #f7f8f9; font: inherit; }
+  .report-field textarea { min-height: 130px; resize: vertical; }
+  .form-error { margin: 0 0 18px; padding: 10px 12px; border: 1px solid #d38c8c; color: #a32222; background: #fff4f4; }
+  .report-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; }
+  .home-link { color: #2c5eae; }
+  .submit-button { border: 0; border-radius: 8px; padding: 11px 28px; color: #fff; background: #2c5eae; font: inherit; cursor: pointer; }
+  @media (max-width: 620px) { .report-card { padding: 20px; } .report-actions { align-items: stretch; flex-direction: column-reverse; } .submit-button { width: 100%; } }
+</style>
+{% endblock %}
+
+{% block body_class %}report-page{% endblock %}
+
+{% block content %}
+<section class="report-card">
+  <h2>書き込み・通報</h2>
+  {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post">
+    <div class="report-field">
+      <label for="report_type">通報種別（必須）</label>
+      <select id="report_type" name="report_type" required>
+        <option value="">選択してください</option>
+        {% for option in ['浸水・洪水', '道路・建物の被害', '土砂災害', '避難所・避難経路', 'けが・救助', 'その他'] %}
+        <option value="{{ option }}" {% if form_data.get('report_type') == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="report-field">
+      <label for="location">発生場所（必須）</label>
+      <input id="location" name="location" type="text" value="{{ form_data.get('location', '') }}" required>
+    </div>
+    <div class="report-field">
+      <label for="occurred_at">発生日時（必須）</label>
+      <input id="occurred_at" name="occurred_at" type="datetime-local" value="{{ form_data.get('occurred_at', '') }}" required>
+    </div>
+    <div class="report-field">
+      <label for="content">詳細（任意）</label>
+      <textarea id="content" name="content">{{ form_data.get('content', '') }}</textarea>
+    </div>
+    <div class="report-actions">
+      <a class="home-link" href="{{ url_for('index') }}">⌂ ホームに戻る</a>
+      <button class="submit-button" type="submit">通報を送信</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

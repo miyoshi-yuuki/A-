@@ -1,20 +1,140 @@
 {% extends "base.html" %}
 
+{% block title %}避難所検索結果 - 防災アプリ{% endblock %}
+{% block body_class %}search-results-page{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root { --blue: #2c5eae; --ink: #51606e; --border: #d3dbe3; --page-width: 1100px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: #f4f7fa; font-family: "Noto Sans JP", "Yu Gothic", sans-serif; }
+  main { width: min(var(--page-width), calc(100% - 40px)); margin: 32px auto 84px; }
+  .results-card { margin-bottom: 20px; padding: 24px; border-radius: 14px; background: #fff; box-shadow: 0 4px 18px rgba(45, 75, 112, .1); }
+  h1, h2 { color: var(--blue); } h1 { margin: 0 0 20px; font-size: 28px; } h2 { margin: 0 0 14px; font-size: 21px; }
+  .refine-forms { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .refine-form { display: flex; align-items: end; gap: 10px; }
+  .refine-form .field { flex: 1; } label { display: block; margin-bottom: 6px; font-weight: 700; }
+  input { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
+  button, a.back-link, .suggestion-link { border: 0; border-radius: 7px; padding: 10px 16px; color: #fff; background: var(--blue); font: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #8db9f5; outline-offset: 2px; }
+  .condition { margin: 0 0 18px; color: #687582; }
+  .error { padding: 10px 12px; border: 1px solid #d38c8c; color: #a32222; background: #fff4f4; }
+  .suggestions { margin: 16px 0 0; padding-left: 20px; }
+  .suggestion-link { display: inline-block; margin: 4px 0; padding: 6px 10px; font-size: 14px; }
+  .result-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr); gap: 22px; padding: 22px 0; border-top: 1px solid #e2e7eb; }
+  .result-item:first-of-type { border-top: 0; }
+  .result-name { margin: 0 0 12px; color: var(--blue); font-size: 23px; }
+  .detail-grid { display: grid; grid-template-columns: 125px 1fr; gap: 8px 12px; margin: 0; }
+  .detail-grid dt { font-weight: 700; } .detail-grid dd { margin: 0; overflow-wrap: anywhere; }
+  .disaster-tag { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 7px; border-radius: 4px; color: #24539c; background: #e7f0fb; font-size: 13px; }
+  .facility-image { display: flex; align-items: center; justify-content: center; height: 110px; margin-bottom: 14px; border: 1px dashed var(--border); color: #687582; background: #f7f8f9; }
+  .route-map { height: 250px; margin-bottom: 10px; border-radius: 10px; }
+  .route-status { min-height: 1.5em; margin: 8px 0; color: #24539c; font-size: 14px; }
+  .distance { font-weight: 700; } .no-results { color: #687582; }
+  .back-link { display: inline-block; margin-top: 4px; }
+  @media (max-width: 800px) { main { width: calc(100% - 24px); margin-top: 16px; } .refine-forms { grid-template-columns: 1fr; } .refine-form { align-items: stretch; flex-direction: column; } .refine-form button { width: 100%; } .result-item { grid-template-columns: 1fr; } .detail-grid { grid-template-columns: 110px 1fr; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<h2>検索結果</h2>
+<section class="results-card">
+  <h1>避難所検索結果</h1>
+  <div class="refine-forms">
+    <form class="refine-form" action="{{ url_for('search_results') }}" method="get">
+      <div class="field"><label for="result_postal_code">郵便番号で再検索</label><input id="result_postal_code" name="postal_code" type="text" inputmode="numeric" maxlength="8" value="{{ postal_code }}" placeholder="例: 0300031"></div>
+      <button type="submit">再検索</button>
+    </form>
+    <form class="refine-form" action="{{ url_for('search_results') }}" method="get">
+      <div class="field"><label for="result_shelter_name">施設名で再検索</label><input id="result_shelter_name" name="shelter_name" type="text" value="{{ shelter_name }}" placeholder="施設名を入力"></div>
+      <button type="submit">再検索</button>
+    </form>
+  </div>
+</section>
 
-{% if results %}
-  <ul>
-    {% for shelter in results %}
-    <li>{{ shelter.name }}</li>
-    {% endfor %}
+<section class="results-card">
+  {% if shelter_name %}<p class="condition">施設名「{{ shelter_name }}」の検索結果</p>{% elif postal_code %}<p class="condition">郵便番号「{{ postal_code }}」の検索結果</p>{% else %}<p class="condition">登録されている全施設</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if suggestions %}
+  <p>もしかして:</p><ul class="suggestions">
+    {% for suggestion in suggestions %}<li><a class="suggestion-link" href="{{ url_for('search_results', shelter_id=suggestion.id) }}">{{ suggestion.display_name }}</a></li>{% endfor %}
   </ul>
-{% else %}
-  <p>該当する避難所が見つかりませんでした</p>
-{% endif %}
+  {% endif %}
 
-<p>
-  <a href="{{ url_for('shelter_search') }}">検索画面に戻る</a> |
-  <a href="{{ url_for('index') }}">トップページへ戻る</a>
-</p>
+  {% if results %}
+    {% for shelter in results %}
+    <article class="result-item">
+      <div>
+        <h2 class="result-name">{{ shelter.display_name }}</h2>
+        <div class="facility-image">
+          {% if shelter.display_image %}<img src="{{ shelter.display_image }}" alt="{{ shelter.display_name }}の施設画像">{% else %}施設画像未登録{% endif %}
+        </div>
+        <dl class="detail-grid">
+          <dt>開設状況</dt><dd>{{ shelter.display_open_status }}</dd>
+          <dt>災害種別</dt><dd>{% if shelter.display_disaster_types is string %}<span class="disaster-tag">{{ shelter.display_disaster_types }}</span>{% elif shelter.display_disaster_types %}{% for disaster in shelter.display_disaster_types %}<span class="disaster-tag">{{ disaster }}</span>{% endfor %}{% else %}未登録{% endif %}</dd>
+          <dt>郵便番号</dt><dd>{{ shelter.display_postal_code }}</dd>
+          <dt>住所</dt><dd>{{ shelter.display_address }}</dd>
+          <dt>施設情報</dt><dd>{{ shelter.display_facility_info }}</dd>
+          <dt>混雑情報</dt><dd>{{ shelter.display_congestion }}</dd>
+          <dt>その他の情報</dt><dd>{{ shelter.display_other_info }}</dd>
+        </dl>
+      </div>
+      <div>
+        <h2>経路案内</h2>
+        <div id="route-map-{{ shelter.display_id }}" class="route-map" aria-label="{{ shelter.display_name }}への経路案内地図"></div>
+        <button type="button" class="route-button" data-map-id="route-map-{{ shelter.display_id }}" data-lat="{{ shelter.lat if shelter.lat is not none else '' }}" data-lng="{{ shelter.lng if shelter.lng is not none else '' }}">現在地から経路を表示</button>
+        <p class="route-status" id="route-status-{{ shelter.display_id }}" role="status"></p>
+        <p class="distance" id="distance-{{ shelter.display_id }}"></p>
+      </div>
+    </article>
+    {% endfor %}
+  {% elif not error %}<p class="no-results">該当する避難所がありません。</p>{% endif %}
+  <a class="back-link" href="{{ url_for('shelter_search') }}">避難所検索に戻る</a>
+</section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const defaultCenter = [{{ map_latitude }}, {{ map_longitude }}];
+  const maps = {};
+  const speedMetersPerMinute = 80;
+  function distanceMeters(from, to) {
+    const radius = 6371000;
+    const lat1 = from[0] * Math.PI / 180, lat2 = to[0] * Math.PI / 180;
+    const deltaLat = (to[0] - from[0]) * Math.PI / 180, deltaLng = (to[1] - from[1]) * Math.PI / 180;
+    const a = Math.sin(deltaLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+    return 2 * radius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  function formatDistance(meters) { return meters >= 1000 ? (meters / 1000).toFixed(1) + 'km' : Math.round(meters) + 'm'; }
+  document.querySelectorAll('.route-map').forEach(function (element) {
+    const map = L.map(element.id).setView(defaultCenter, 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+    maps[element.id] = map;
+  });
+  document.querySelectorAll('.route-button').forEach(function (button) {
+    const map = maps[button.dataset.mapId];
+    const status = document.getElementById(button.dataset.mapId.replace('route-map-', 'route-status-'));
+    const distance = document.getElementById(button.dataset.mapId.replace('route-map-', 'distance-'));
+    const lat = Number(button.dataset.lat), lng = Number(button.dataset.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) { button.disabled = true; status.textContent = '施設の位置情報が未登録のため、経路を表示できません。'; return; }
+    const destination = [lat, lng];
+    L.marker(destination).addTo(map).bindPopup(button.closest('.result-item').querySelector('.result-name').textContent).openPopup();
+    button.addEventListener('click', function () {
+      status.textContent = '現在地を取得しています...'; distance.textContent = '';
+      if (!navigator.geolocation) { status.textContent = 'このブラウザは位置情報に対応していません。'; return; }
+      navigator.geolocation.getCurrentPosition(function (position) {
+        const current = [position.coords.latitude, position.coords.longitude];
+        L.marker(current).addTo(map).bindPopup('現在地');
+        L.polyline([current, destination], { color: '#2c5eae', weight: 4 }).addTo(map);
+        map.fitBounds([current, destination], { padding: [24, 24] });
+        const meters = distanceMeters(current, destination);
+        distance.textContent = '直線距離に基づく目安: ' + formatDistance(meters) + ' / 徒歩約' + Math.max(1, Math.ceil(meters / speedMetersPerMinute)) + '分（時速約4.8km換算）';
+        status.textContent = '現在地と避難所を表示しました。';
+      }, function (error) {
+        status.textContent = error.code === 1 ? '位置情報の利用が拒否されました。' : '現在地を取得できませんでした。';
+      });
+    });
+  });
+});
+</script>
 {% endblock %}

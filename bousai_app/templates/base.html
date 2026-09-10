@@ -1,43 +1,102 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" style="--font-scale: 1">
 <head>
   <meta charset="utf-8">
   <title>{% block title %}防災アプリ{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root { --font-scale: 1; }
+    body { zoom: var(--font-scale); }
+    .accessibility-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px 16px; padding: 8px max(20px, calc((100% - 1390px) / 2)); color: #304052; background: #eef3f8; font-size: 14px; }
+    .accessibility-bar label { font-weight: 700; }
+    .accessibility-bar select { min-height: 34px; border: 1px solid #aebdca; border-radius: 6px; padding: 4px 8px; color: #304052; background: #fff; font: inherit; }
+    @media (max-width: 620px) { .accessibility-bar { justify-content: center; padding: 8px 12px; } }
+  </style>
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+  <div class="accessibility-bar" role="region" aria-label="アクセシビリティ設定">
+    <label for="font-size-setting" data-i18n="文字の大きさ">文字の大きさ</label>
+    <select id="font-size-setting">
+      <option value="small" data-original="小">小</option><option value="medium" selected data-original="中">中</option><option value="large" data-original="大">大</option>
+    </select>
+    <label for="language-setting" data-i18n="言語 / Language">言語 / Language</label>
+    <select id="language-setting">
+      <option value="ja" data-original="日本語">日本語</option><option value="en">English</option><option value="zh">中文</option><option value="ko">한국어</option>
+    </select>
+  </div>
   <header class="app-header">
-    <h1>防災アプリ</h1>
+    <h1 data-i18n="防災アプリ">防災アプリ</h1>
     <button class="menu-button" type="button" aria-label="メニューを開く" aria-expanded="false">☰</button>
   </header>
-
   <nav class="app-nav">
-    <a href="{{ url_for('index') }}">ホーム</a> |
-    <a href="{{ url_for('shelter_search') }}">避難所検索</a> |
-    <a href="{{ url_for('shelter_register') }}">避難所登録</a> |
-    <a href="{{ url_for('board') }}">指示・発信ボード</a>
-    ｜
-    {% if session.logged_in %}
-      ログイン中{% if session.username %}（{{ session.username }}）{% endif %}
-      <a href="{{ url_for('logout') }}">ログアウト</a>
-    {% else %}
-      未ログイン
-      <a href="{{ url_for('login') }}">ログイン</a>
-    {% endif %}
+    <a href="{{ url_for('index') }}" data-i18n="ホーム">ホーム</a> |
+    <a href="{{ url_for('shelter_search') }}" data-i18n="避難所検索">避難所検索</a> |
+    <a href="{{ url_for('shelter_register') }}" data-i18n="避難所登録">避難所登録</a> |
+    <a href="{{ url_for('board') }}" data-i18n="指示・発信ボード">指示・発信ボード</a>
+    <a href="{{ url_for('report') }}" data-i18n="書き込み・通報">書き込み・通報</a> ｜
+    {% if session.logged_in %}<span data-i18n="ログイン中">ログイン中</span>{% if session.username %}（{{ session.username }}）{% endif %}<a href="{{ url_for('logout') }}" data-i18n="ログアウト">ログアウト</a>
+    {% else %}<span data-i18n="未ログイン">未ログイン</span> <a href="{{ url_for('login') }}" data-i18n="ログイン">ログイン</a>{% endif %}
   </nav>
-
-  <main>
-    <!-- ここに子テンプレートの content が入る -->
-    {% block content %}{% endblock %}
-  </main>
+  <main>{% block content %}{% endblock %}</main>
   <script>
-    document.querySelector('.menu-button').addEventListener('click', function () {
-      const navigation = document.querySelector('.app-nav');
-      const expanded = this.getAttribute('aria-expanded') === 'true';
-      this.setAttribute('aria-expanded', String(!expanded));
-      navigation.classList.toggle('is-open', !expanded);
-    });
+  (function () {
+    'use strict';
+    const fixedJapanese = document.body.classList.contains('japanese-only');
+    const originalText = new WeakMap();
+    const fontKey = 'bousai-font-size', languageKey = 'bousai-language';
+    const scales = { small: '0.875', medium: '1', large: '1.125' }, languages = ['ja', 'en', 'zh', 'ko'];
+    const dictionary = {
+      '防災アプリ': { en: 'Disaster Prevention App', zh: '防灾应用', ko: '방재 앱' }, 'ホーム': { en: 'Home', zh: '首页', ko: '홈' },
+      '避難所検索': { en: 'Shelter Search', zh: '避难所搜索', ko: '대피소 검색' }, '避難所登録': { en: 'Register Shelter', zh: '登记避难所', ko: '대피소 등록' },
+      '指示・発信ボード': { en: 'Notice Board', zh: '指示发布板', ko: '지시·발신 게시판' }, '書き込み・通報': { en: 'Report', zh: '留言·报告', ko: '글쓰기·신고' },
+      'ログイン': { en: 'Log in', zh: '登录', ko: '로그인' }, 'ログアウト': { en: 'Log out', zh: '退出登录', ko: '로그아웃' }, 'ログイン中': { en: 'Logged in', zh: '已登录', ko: '로그인 중' }, '未ログイン': { en: 'Not logged in', zh: '未登录', ko: '로그인하지 않음' },
+      'メニューを開く': { en: 'Open menu', zh: '打开菜单', ko: '메뉴 열기' }, 'メニューを閉じる': { en: 'Close menu', zh: '关闭菜单', ko: '메뉴 닫기' }, 'アクセシビリティ設定': { en: 'Accessibility settings', zh: '无障碍设置', ko: '접근성 설정' },
+      '文字の大きさ': { en: 'Text size', zh: '文字大小', ko: '글자 크기' }, '言語 / Language': { en: 'Language', zh: '语言', ko: '언어' }, '小': { en: 'Small', zh: '小', ko: '작게' }, '中': { en: 'Medium', zh: '中', ko: '보통' }, '大': { en: 'Large', zh: '大', ko: '크게' },
+      '日本語': { en: 'Japanese', zh: '日语', ko: '일본어' }, 'お知らせ': { en: 'Notices', zh: '通知', ko: '알림' }, '掲示板': { en: 'Bulletin board', zh: '公告栏', ko: '게시판' }, 'すべて表示': { en: 'Show all', zh: '显示全部', ko: '모두 보기' }, '一部表示に戻す': { en: 'Show fewer', zh: '恢复部分显示', ko: '일부만 보기' },
+      '避難所マップ': { en: 'Shelter map', zh: '避难所地图', ko: '대피소 지도' }, '気象警報・注意報': { en: 'Weather warnings and advisories', zh: '气象警报和注意报', ko: '기상 경보·주의보' }, '避難所を探す': { en: 'Find a shelter', zh: '查找避难所', ko: '대피소 찾기' }, '施設情報': { en: 'Facility information', zh: '设施信息', ko: '시설 정보' }, '登録地点': { en: 'Registration location', zh: '登记地点', ko: '등록 위치' }, '登録情報履歴': { en: 'Registration history', zh: '登记信息历史', ko: '등록 정보 기록' },
+      '登録情報はありません。': { en: 'No registration information.', zh: '没有登记信息。', ko: '등록 정보가 없습니다.' }, '登録が完了しました。': { en: 'Registration completed.', zh: '登记完成。', ko: '등록이 완료되었습니다.' }, '住所を地図で確認': { en: 'Check address on map', zh: '在地图上确认地址', ko: '지도에서 주소 확인' }, '住所を入力してください。': { en: 'Please enter an address.', zh: '请输入地址。', ko: '주소를 입력하세요.' }, '住所を検索しています...': { en: 'Searching for the address...', zh: '正在搜索地址……', ko: '주소를 검색하고 있습니다...' }, '施設画像未登録': { en: 'No facility image registered', zh: '未登记设施图片', ko: '시설 이미지 미등록' }, '未登録': { en: 'Not registered', zh: '未登记', ko: '미등록' }, '住所未登録': { en: 'Address not registered', zh: '未登记地址', ko: '주소 미등록' }, '郵便番号未登録': { en: 'Postal code not registered', zh: '未登记邮政编码', ko: '우편번호 미등록' },
+      'ホームに戻る': { en: 'Back to home', zh: '返回首页', ko: '홈으로 돌아가기' }, 'ホームへ戻る': { en: 'Back to home', zh: '返回首页', ko: '홈으로 돌아가기' }, '選択してください': { en: 'Please select', zh: '请选择', ko: '선택하세요' }, '読み込み中...': { en: 'Loading...', zh: '加载中……', ko: '로드 중...' }, '検索': { en: 'Search', zh: '搜索', ko: '검색' }, '再検索': { en: 'Search again', zh: '重新搜索', ko: '다시 검색' }, '施設一覧': { en: 'Facility list', zh: '设施列表', ko: '시설 목록' }, '避難所検索結果': { en: 'Shelter search results', zh: '避难所搜索结果', ko: '대피소 검색 결과' }, '経路案内': { en: 'Directions', zh: '路线指引', ko: '경로 안내' },
+      '開設状況': { en: 'Opening status', zh: '开放状态', ko: '개설 상태' }, '災害種別': { en: 'Disaster types', zh: '灾害类型', ko: '재해 종류' }, '郵便番号': { en: 'Postal code', zh: '邮政编码', ko: '우편번호' }, '住所': { en: 'Address', zh: '地址', ko: '주소' }, '混雑情報': { en: 'Crowding information', zh: '拥挤信息', ko: '혼잡 정보' }, 'その他の情報': { en: 'Other information', zh: '其他信息', ko: '기타 정보' }, '削除': { en: 'Delete', zh: '删除', ko: '삭제' }, '通報種別': { en: 'Report type', zh: '报告类型', ko: '신고 유형' }, '発生場所': { en: 'Location', zh: '发生地点', ko: '발생 장소' }, '発生日時': { en: 'Date and time', zh: '发生日期和时间', ko: '발생 일시' }, '詳細': { en: 'Details', zh: '详情', ko: '상세 내용' },
+      '管理者ログイン': { en: 'Administrator login', zh: '管理员登录', ko: '관리자 로그인' }, 'パスワード': { en: 'Password', zh: '密码', ko: '비밀번호' }, '重要': { en: 'Important', zh: '重要', ko: '중요' }, '最近の発信': { en: 'Recent notices', zh: '最近发布', ko: '최근 발신' }, '送信': { en: 'Send', zh: '发送', ko: '전송' }, '気象情報の取得に失敗しました。': { en: 'Failed to retrieve weather information.', zh: '获取气象信息失败。', ko: '기상 정보를 가져오지 못했습니다.' }, '現在発令している警報・注意報はございません': { en: 'There are currently no weather warnings or advisories.', zh: '目前没有发布警报或注意报。', ko: '현재 발령 중인 경보·주의보가 없습니다.' }, '施設画像未登録': { en: 'No facility image registered', zh: '未登记设施图片', ko: '시설 이미지 미등록' }, '現在地から経路を表示': { en: 'Show route from current location', zh: '显示从当前位置的路线', ko: '현재 위치에서 경로 표시' }, '現在地を取得しています...': { en: 'Getting your location...', zh: '正在获取当前位置……', ko: '현재 위치를 가져오는 중...' }, '現在地と避難所を表示しました。': { en: 'Your location and the shelter are shown.', zh: '已显示当前位置和避难所。', ko: '현재 위치와 대피소를 표시했습니다.' }, '位置情報の利用が拒否されました。': { en: 'Location access was denied.', zh: '位置访问被拒绝。', ko: '위치 정보 사용이 거부되었습니다.' }, '現在地を取得できませんでした。': { en: 'Could not get your location.', zh: '无法获取当前位置。', ko: '현재 위치를 가져올 수 없습니다.' }, 'このブラウザは位置情報に対応していません。': { en: 'This browser does not support geolocation.', zh: '此浏览器不支持定位。', ko: '이 브라우저는 위치 정보를 지원하지 않습니다.' }, '対象と本文を入力してください。': { en: 'Please enter a target and message.', zh: '请输入对象和正文。', ko: '대상과 내용을 입력하세요.' }, '避難所名、住所、連絡先を入力してください。': { en: 'Please enter the shelter name, address, and contact.', zh: '请输入避难所名称、地址和联系方式。', ko: '대피소 이름, 주소, 연락처를 입력하세요.' }, '予定収容人数は0以上の整数で入力してください。': { en: 'Capacity must be a whole number of 0 or more.', zh: '预计容纳人数必须是0以上的整数。', ko: '예정 수용 인원은 0 이상의 정수로 입력하세요.' }, '住所を検索して、地図上の位置を表示してください。': { en: 'Search for the address and show its location on the map.', zh: '请搜索地址并在地图上显示位置。', ko: '주소를 검색하여 지도에 위치를 표시하세요.' }, '該当する施設名の避難所がありません。': { en: 'No shelter matches that facility name.', zh: '没有符合该设施名称的避难所。', ko: '해당 시설명과 일치하는 대피소가 없습니다.' }, '郵便番号は7桁で入力してください。': { en: 'Enter a 7-digit postal code.', zh: '请输入7位邮政编码。', ko: '우편번호는 7자리로 입력하세요.' }, '例: 0300031': { en: 'Example: 0300031', zh: '例：0300031', ko: '예: 0300031' }
+    };
+    function read(key, allowed, fallback) { try { const value = localStorage.getItem(key); return allowed.includes(value) ? value : fallback; } catch (_) { return fallback; } }
+    function write(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
+    function translate(value, language) { return language === 'ja' ? value : (dictionary[value] && dictionary[value][language]) || value; }
+    function translateTitle(value, language) { return value.split(' - ').map(function (part) { return translate(part, language); }).join(' - '); }
+    function applyFont(value) { document.documentElement.style.setProperty('--font-scale', scales[value] || scales.medium); }
+    function translatePage(language) {
+      document.documentElement.lang = language;
+      const title = document.title.replace(/ \| .+$/, '');
+      if (!document.documentElement.dataset.originalTitle) document.documentElement.dataset.originalTitle = title;
+      document.title = translateTitle(document.documentElement.dataset.originalTitle, language);
+      document.querySelectorAll('[data-i18n]').forEach(function (element) { element.textContent = translate(element.dataset.i18n, language); });
+      document.querySelectorAll('[data-i18n-attr]').forEach(function (element) { element.dataset.i18nAttr.split(',').forEach(function (attribute) { const original = element.getAttribute('data-original-' + attribute); if (original) element.setAttribute(attribute, translate(original, language)); }); });
+      document.querySelectorAll('option[data-original]').forEach(function (option) { option.textContent = translate(option.dataset.original, language); });
+      document.querySelectorAll('input, textarea, select, button, img, [aria-label], [title]').forEach(function (element) { ['placeholder', 'alt', 'aria-label', 'title'].forEach(function (attribute) { if (!element.hasAttribute(attribute)) return; const key = 'data-original-' + attribute; if (!element.hasAttribute(key)) element.setAttribute(key, element.getAttribute(attribute)); element.setAttribute(attribute, translate(element.getAttribute(key), language)); }); });
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      let textNode;
+      while ((textNode = walker.nextNode())) {
+        const parent = textNode.parentElement;
+        if (!parent || ['SCRIPT', 'STYLE', 'TEXTAREA', 'OPTION'].includes(parent.tagName) || parent.closest('.leaflet-container')) continue;
+        const original = originalText.get(textNode) || textNode.nodeValue.trim();
+        if (!original || !dictionary[original]) continue;
+        originalText.set(textNode, original);
+        textNodes.push([textNode, original]);
+      }
+      textNodes.forEach(function (entry) { entry[0].nodeValue = entry[0].nodeValue.replace(entry[0].nodeValue.trim(), translate(entry[1], language)); });
+    }
+    const fontSelect = document.getElementById('font-size-setting'), languageSelect = document.getElementById('language-setting');
+    const font = read(fontKey, Object.keys(scales), 'medium'), language = fixedJapanese ? 'ja' : read(languageKey, languages, 'ja');
+    fontSelect.value = font; languageSelect.value = language; applyFont(font); translatePage(language);
+    fontSelect.addEventListener('change', function () { const value = Object.keys(scales).includes(this.value) ? this.value : 'medium'; this.value = value; applyFont(value); write(fontKey, value); });
+    languageSelect.addEventListener('change', function () { if (fixedJapanese) { this.value = 'ja'; translatePage('ja'); return; } const value = languages.includes(this.value) ? this.value : 'ja'; this.value = value; write(languageKey, value); translatePage(value); });
+    const menuButton = document.querySelector('.menu-button'), navigation = document.querySelector('.app-nav');
+    menuButton.addEventListener('click', function () { const expanded = this.getAttribute('aria-expanded') === 'true'; const nextLabel = !expanded ? 'メニューを閉じる' : 'メニューを開く'; this.setAttribute('aria-expanded', String(!expanded)); this.setAttribute('aria-label', translate(nextLabel, document.documentElement.lang)); navigation.classList.toggle('is-open', !expanded); });
+    const observer = new MutationObserver(function (mutations) { if (mutations.some(function (mutation) { return mutation.addedNodes.length; })) translatePage(document.documentElement.lang); });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }());
   </script>
 </body>
 </html>

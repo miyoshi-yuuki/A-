@@ -1,14 +1,29 @@
 [
   {
     "id": 1,
-    "name": "御所見小学校"
+    "name": "御所見小学校",
+    "district": "中区",
+    "postal_code": "0300031",
+    "address": "青森県青森市中央1丁目",
+    "latitude": 40.8312,
+    "longitude": 140.7421
   },
   {
     "id": 2,
-    "name": "片瀬小学校"
+    "name": "片瀬小学校",
+    "district": "東区",
+    "postal_code": "0300801",
+    "address": "青森県青森市東町2丁目",
+    "latitude": 40.8268,
+    "longitude": 140.7289
   },
   {
     "id": 5,
-    "name": "鵠洋小学校"
+    "name": "鵠洋小学校",
+    "district": "西区",
+    "postal_code": "0300822",
+    "address": "青森県青森市西町3丁目",
+    "latitude": 40.8354,
+    "longitude": 140.7376
   }
 ]
