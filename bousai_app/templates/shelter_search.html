@@ -61,7 +61,7 @@
       <label for="shelter_id">登録施設から選択検索</label>
       <select id="shelter_id" name="shelter_id">
         <option value="">選択してください</option>
-        {% for shelter in shelters %}<option value="{{ shelter.id }}">{{ shelter.name or '名称未設定' }}</option>{% endfor %}
+        {% for shelter in shelters %}<option value="{{ shelter.id }}" data-i18n="{{ shelter.name or '名称未設定' }}">{{ shelter.name or '名称未設定' }}</option>{% endfor %}
       </select>
     </div>
     <button type="submit">施設を検索</button>

@@ -30,9 +30,12 @@
   .notice-item:first-child { padding-top: 0; }
   .notice-item:last-child { border-bottom: 0; }
   .notice-item.important { padding-left: 10px; border-left: 4px solid #b3261e; color: #8d1f1b; background: #fff1f0; font-weight: 700; }
+  .notice-item.critical { padding-left: 10px; border-left: 4px solid #6f42c1; color: #56319a; background: #f3effb; font-weight: 700; }
   .notice-item p { margin: 5px 0; }
   .notice-meta { color: #687582; font-size: 13px; font-weight: 400; }
   .important-label { margin-right: 6px; font-size: 12px; }
+  .notice-attachments { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 8px 0 0; font-size: 13px; font-weight: 400; }
+  .notice-attachment { color: #24539c; }
   .empty-message { color: #687582; }
   .toggle-button, .report-button { border: 0; border-radius: 8px; color: #fff; background: var(--blue); font: inherit; cursor: pointer; }
   .toggle-button { padding: 8px 14px; font-size: 14px; }
@@ -59,7 +62,7 @@
 <h2 class="home-title">防災アプリ</h2>
 <div class="home-grid">
   <section class="home-card">
-    <h3 class="section-heading">避難所マップ <small>{{ area_name }}</small></h3>
+    <h3 class="section-heading">避難所マップ <small data-i18n="{{ area_name }}">{{ area_name }}</small></h3>
     <div id="shelterMap" aria-label="{{ area_name }}周辺の避難所地図"></div>
     <div class="map-tools"><button id="homeLocationButton" class="location-button" type="button">現在地を取得</button><p id="homeLocationStatus" class="location-status" role="status">現在地取得前です。地図は青森市中心部から利用できます。</p></div>
     <div class="map-legend" aria-label="地図の凡例"><span class="legend-item"><span class="legend-dot"></span>現在地</span><span class="legend-item"><span class="legend-dot open"></span>開設中</span><span class="legend-item"><span class="legend-dot closed"></span>開設されていません</span></div>
@@ -70,9 +73,11 @@
     <ul id="notices" class="notice-list">
       {% if resident_notices %}
         {% for notice in resident_notices %}
-        <li class="notice-item {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}important{% endif %}" data-notice-index="{{ loop.index0 }}" {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}aria-label="重要なお知らせ"{% endif %}>
-          {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}<span class="important-label">重要</span>{% endif %}
-          {{ notice.content }}{% if notice.shelter %}（避難先: {{ notice.shelter }}）{% endif %}
+        {% set notice_priority = (notice.get('priority') or notice.get('importance') or 1)|int %}
+        <li class="notice-item{% if notice_priority >= 5 %} critical{% elif notice_priority >= 3 %} important{% endif %}" data-notice-index="{{ loop.index0 }}" {% if notice_priority >= 3 %}aria-label="{{ '最重要' if notice_priority >= 5 else '重要' }}なお知らせ"{% endif %}>
+          {% if notice_priority >= 5 %}<span class="important-label">最重要</span>{% elif notice_priority >= 3 %}<span class="important-label">重要</span>{% endif %}
+          <span data-i18n="{{ notice.content }}">{{ notice.content }}</span>{% if notice.shelter %}（避難先: <span data-i18n="{{ notice.shelter }}">{{ notice.shelter }}</span>）{% endif %}
+          {% if notice.attachments %}<p class="notice-attachments">添付: {% for attachment in notice.attachments %}<a class="notice-attachment" href="{{ attachment }}" target="_blank" rel="noopener">ファイル{{ loop.index }}</a>{% endfor %}</p>{% endif %}
           <p class="notice-meta">{{ notice.updated_at or notice.created_at }}</p>
         </li>
         {% endfor %}
@@ -90,9 +95,11 @@
     <ul id="board" class="notice-list">
       {% if resident_notices %}
         {% for notice in resident_notices %}
-        <li class="notice-item {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}important{% endif %}" data-notice-index="{{ loop.index0 }}" {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}aria-label="重要なお知らせ"{% endif %}>
-          {% if (notice.get('priority') or notice.get('importance') or 1)|int >= 3 %}<span class="important-label">【重要】</span>{% endif %}
-          <p>{{ notice.content }}{% if notice.shelter %}（避難先: {{ notice.shelter }}）{% endif %}</p>
+        {% set notice_priority = (notice.get('priority') or notice.get('importance') or 1)|int %}
+        <li class="notice-item{% if notice_priority >= 5 %} critical{% elif notice_priority >= 3 %} important{% endif %}" data-notice-index="{{ loop.index0 }}" {% if notice_priority >= 3 %}aria-label="{{ '最重要' if notice_priority >= 5 else '重要' }}なお知らせ"{% endif %}>
+          {% if notice_priority >= 5 %}<span class="important-label">【最重要】</span>{% elif notice_priority >= 3 %}<span class="important-label">【重要】</span>{% endif %}
+          <p><span data-i18n="{{ notice.content }}">{{ notice.content }}</span>{% if notice.shelter %}（避難先: <span data-i18n="{{ notice.shelter }}">{{ notice.shelter }}</span>）{% endif %}</p>
+          {% if notice.attachments %}<p class="notice-attachments">添付: {% for attachment in notice.attachments %}<a class="notice-attachment" href="{{ attachment }}" target="_blank" rel="noopener">ファイル{{ loop.index }}</a>{% endfor %}</p>{% endif %}
           <span class="notice-meta">{{ notice.updated_at or notice.created_at }}</span>
         </li>
         {% endfor %}

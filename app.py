@@ -95,6 +95,8 @@ REPORTS_FILE = os.path.join(APP_DIR, 'data', 'reports.json')
 UPLOAD_DIR = os.path.join(APP_DIR, 'static', 'uploads')
 ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
+ALLOWED_ATTACHMENT_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS | {'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip'}
+MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
 OPEN_STATUS_OPTIONS = {
     'open': '開設中',
     'closed': '開設されていません',
@@ -169,8 +171,8 @@ def render_shelter_register(error=None, success=False, form_data=None, uploaded_
         uploaded_images=uploaded_images or [],
         registration_history=history,
         format_registered_at=format_registered_at,
-        map_latitude=CURRENT_LOCATION_LATITUDE,
-        map_longitude=CURRENT_LOCATION_LONGITUDE,
+        map_latitude=AREA_LATITUDE,
+        map_longitude=AREA_LONGITUDE,
         open_status_options=OPEN_STATUS_OPTIONS,
         disaster_options=DISASTER_OPTIONS,
     )
@@ -203,6 +205,49 @@ def save_uploaded_images(files):
         image.save(os.path.join(UPLOAD_DIR, filename))
         saved_paths.append(f'/static/uploads/{filename}')
     return saved_paths
+
+
+def validate_attachment_files(files):
+    """添付ファイルの拡張子とサイズを検証する"""
+    valid_files = [file for file in files if file and file.filename]
+    for attachment in valid_files:
+        filename = secure_filename(attachment.filename)
+        extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        if extension not in ALLOWED_ATTACHMENT_EXTENSIONS:
+            return None, '添付できるファイル形式ではありません。'
+        attachment.stream.seek(0, os.SEEK_END)
+        if attachment.stream.tell() > MAX_ATTACHMENT_SIZE:
+            return None, '添付ファイルは1ファイル10MB以下にしてください。'
+        attachment.stream.seek(0)
+    return valid_files, None
+
+
+def save_uploaded_files(files):
+    """検証済み添付ファイルをランダム名で保存する"""
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    saved_paths = []
+    for attachment in files:
+        filename = secure_filename(attachment.filename)
+        extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'bin'
+        stored_filename = f'{uuid.uuid4().hex}.{extension}'
+        attachment.save(os.path.join(UPLOAD_DIR, stored_filename))
+        saved_paths.append(f'/static/uploads/{stored_filename}')
+    return saved_paths
+
+
+def delete_uploaded_images(image_urls):
+    """アプリが管理するアップロード画像だけを削除する"""
+    upload_root = os.path.abspath(UPLOAD_DIR)
+    for image_url in image_urls:
+        if not isinstance(image_url, str) or not image_url.startswith('/static/uploads/'):
+            continue
+        image_path = os.path.abspath(os.path.join(upload_root, os.path.basename(image_url)))
+        if os.path.commonpath([upload_root, image_path]) != upload_root:
+            continue
+        try:
+            os.remove(image_path)
+        except FileNotFoundError:
+            pass
 # ────────────────────────────────
 
 # ────────────────────────────────
@@ -326,6 +371,13 @@ def shelter_postal_code(shelter):
 
 def prepare_shelter_detail(shelter, index=0):
     """詳細画面で安全に利用できる避難所データを作る"""
+    image_values = shelter.get('images') or []
+    if isinstance(image_values, str):
+        image_values = [image_values]
+    if not image_values:
+        legacy_image = shelter.get('image_url') or shelter.get('image')
+        if legacy_image:
+            image_values = [legacy_image]
     return {
         **shelter,
         'display_id': shelter.get('id') or f'unknown-{index}',
@@ -335,9 +387,11 @@ def prepare_shelter_detail(shelter, index=0):
         'display_address': shelter.get('address') or '住所未登録',
         'display_facility_info': shelter.get('facility_info') or shelter.get('facility') or '未登録',
         'display_congestion': shelter.get('congestion') or shelter.get('status') or '未登録',
+        'display_capacity': f"{shelter['capacity']}人" if shelter.get('capacity') is not None else '未登録',
         'display_other_info': shelter.get('other_info') or shelter.get('note') or '未登録',
         'display_disaster_types': normalize_disaster_types(shelter.get('disaster_types') or shelter.get('disaster_type')),
-        'display_image': shelter.get('image_url') or shelter.get('image') or (shelter.get('images') or [None])[0],
+        'display_images': image_values,
+        'display_image': image_values[0] if image_values else None,
         'display_open_status': display_open_status(shelter),
         'lat': shelter.get('lat', shelter.get('latitude')),
         'lng': shelter.get('lng', shelter.get('longitude')),
@@ -543,6 +597,7 @@ def shelter_form_values(form_data, existing=None):
     capacity = form_data.get('capacity', '').strip()
     latitude = form_data.get('latitude', '').strip()
     longitude = form_data.get('longitude', '').strip()
+    congestion = form_data.get('congestion', '').strip()
     if not name or not address or not phone:
         return None, '避難所名、住所、連絡先を入力してください。'
     try:
@@ -561,6 +616,8 @@ def shelter_form_values(form_data, existing=None):
         except (TypeError, ValueError):
             return None, '地図上の位置情報を正しく入力してください。'
     status = normalize_open_status(form_data.get('open_status'))
+    if congestion not in {'混雑', 'やや混雑', 'やや空いている', '空いている'}:
+        congestion = ''
     values = {
         'name': name,
         'address': address,
@@ -570,6 +627,7 @@ def shelter_form_values(form_data, existing=None):
         'pets': form_data.getlist('pets'),
         'disaster_types': normalize_disaster_types(form_data.getlist('disaster_types')),
         'open_status': status,
+        'congestion': congestion,
         'remarks': form_data.get('remarks', '').strip(),
         'latitude': latitude_value,
         'longitude': longitude_value,
@@ -592,9 +650,13 @@ def save_shelter_from_request(existing=None):
     now = datetime.now(JST).isoformat(timespec='seconds')
     if existing:
         old_values = existing.copy()
+        existing_images = existing.get('images') or []
+        if isinstance(existing_images, str):
+            existing_images = [existing_images]
+        removed_images = [image for image in request.form.getlist('remove_images') if image in existing_images]
+        retained_images = [image for image in existing_images if image not in removed_images]
         existing.update(values)
-        if image_urls:
-            existing['images'] = image_urls
+        existing['images'] = retained_images + image_urls
         existing.setdefault('registered_at', now)
         target = existing
     else:
@@ -615,6 +677,8 @@ def save_shelter_from_request(existing=None):
         else:
             shelters.pop()
         return render_shelter_register(error='避難所情報を保存できませんでした。', form_data=request.form), 500
+    if existing and removed_images:
+        delete_uploaded_images(removed_images)
     return None
 
 
@@ -643,6 +707,25 @@ def shelter_edit(shelter_id):
         return redirect(url_for('search_results', shelter_id=shelter_id))
     form_data = {**shelter, 'open_status': normalize_open_status(shelter.get('open_status', shelter.get('status')))}
     return render_shelter_register(form_data=form_data)
+
+
+@app.route('/shelter_register/<int:shelter_id>/delete', methods=['POST'])
+@login_required
+def shelter_delete(shelter_id):
+    shelter_index = next((index for index, item in enumerate(shelters) if item.get('id') == shelter_id), None)
+    if shelter_index is None:
+        return '避難所が見つかりません。', 404
+    shelter = shelters.pop(shelter_index)
+    try:
+        save_shelters()
+    except OSError:
+        shelters.insert(shelter_index, shelter)
+        return render_shelter_register(error='避難所情報を削除できませんでした。', form_data=shelter), 500
+    image_values = shelter.get('images') or []
+    if isinstance(image_values, str):
+        image_values = [image_values]
+    delete_uploaded_images(image_values)
+    return redirect(url_for('search_results'))
 
 
 @app.route('/api/geocode')
@@ -710,6 +793,32 @@ def board():
                 form_data=request.form,
             ), 400
 
+        attachment_files, attachment_error = validate_attachment_files(request.files.getlist('attachment'))
+        if attachment_error:
+            return render_template(
+                'board.html',
+                instructions=sort_resident_notices(instructions),
+                shelters=shelters,
+                area_name=AREA_NAME,
+                area_latitude=AREA_LATITUDE,
+                area_longitude=AREA_LONGITUDE,
+                error=attachment_error,
+                form_data=request.form,
+            ), 400
+        try:
+            attachment_urls = save_uploaded_files(attachment_files)
+        except OSError:
+            return render_template(
+                'board.html',
+                instructions=sort_resident_notices(instructions),
+                shelters=shelters,
+                area_name=AREA_NAME,
+                area_latitude=AREA_LATITUDE,
+                area_longitude=AREA_LONGITUDE,
+                error='ファイルを保存できませんでした。',
+                form_data=request.form,
+            ), 500
+
         now = get_japan_time()
         next_id = max((instruction.get('id', 0) for instruction in instructions), default=0) + 1
         instructions.insert(0, {
@@ -724,6 +833,7 @@ def board():
             'note': note,
             'email_subject': email_subject,
             'email_body': email_body,
+            'attachments': attachment_urls,
             'created_at': now,
             'updated_at': now,
         })
@@ -826,6 +936,8 @@ def search_results():
         postal_code=postal_code,
         shelter_name=shelter_name,
         error=error,
+        shelter_id=shelter_id,
+        shelters=shelters,
         map_latitude=40.8281,
         map_longitude=140.7397,
         disaster_options=DISASTER_OPTIONS,

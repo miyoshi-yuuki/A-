@@ -32,12 +32,18 @@
   .success { margin: 0 0 20px; padding: 10px 12px; color: #176b35; background: #eaf7ee; }
   #registerMap { height: 360px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
   .file-note { color: #687582; font-size: 13px; }
+  .current-images { display: grid; gap: 10px; margin-bottom: 16px; }
+  .current-image { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 7px; background: #f7f8f9; }
+  .current-image img { width: 96px; height: 72px; object-fit: cover; border-radius: 4px; }
+  .current-image label { margin: 0; font-weight: 400; }
   .history { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e2e7eb; }
   .history-list { margin: 0; padding: 0; list-style: none; }
   .history-item { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #e2e7eb; overflow-wrap: anywhere; }
   .history-time { color: #687582; font-size: 13px; white-space: nowrap; }
   .form-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; }
   .home-link { color: var(--blue); background: transparent; padding-left: 0; }
+  .delete-form { margin-top: 12px; text-align: right; }
+  .delete-button { color: #a32222; background: #fff4f4; border: 1px solid #d38c8c; }
   .status-option { display: inline-flex; align-items: center; gap: 6px; margin-right: 18px; font-weight: 400; }
   .disaster-option { display: inline-flex; align-items: center; gap: 5px; min-width: 120px; margin: 3px 12px 3px 0; font-weight: 400; }
   @media (max-width: 760px) { main { width: calc(100% - 24px); margin-top: 16px; } .register-grid { grid-template-columns: 1fr; gap: 16px; } .register-card { padding: 19px; } .address-row, .form-actions { align-items: stretch; flex-direction: column; } .address-row button, .form-actions button { width: 100%; } #registerMap { height: 300px; } .history-item { align-items: flex-start; flex-direction: column; gap: 3px; } }
@@ -59,6 +65,7 @@
       <div class="field"><label for="phone">避難所連絡先（必須）</label><input id="phone" name="phone" type="tel" value="{{ form_data.get('phone', '') }}" required></div>
       <div class="field"><label for="capacity">収容人数（任意）</label><input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.get('capacity', '') }}"></div>
       <fieldset><legend>開設状況</legend><div class="checks">{% for value, label in open_status_options.items() %}<label class="status-option"><input type="radio" name="open_status" value="{{ value }}" {% if form_data.get('open_status', 'closed') == value %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
+      <fieldset><legend>混雑状況</legend><div class="checks">{% for value in ['混雑', 'やや混雑', 'やや空いている', '空いている'] %}<label class="status-option"><input type="radio" name="congestion" value="{{ value }}" {% if form_data.get('congestion', '') == value %}checked{% endif %}>{{ value }}</label>{% endfor %}</div></fieldset>
       <fieldset><legend>対応災害（複数選択可）</legend><div class="checks">{% for option, icon in disaster_options.items() %}<label class="disaster-option"><input type="checkbox" name="disaster_types" value="{{ option }}" {% if option in selected_disaster_types %}checked{% endif %}>{{ icon }} {{ option }}</label>{% endfor %}</div></fieldset>
       <fieldset><legend>設備（任意）</legend><div class="checks">{% for option in ['トイレ', '多目的トイレ', 'Wi-Fi', '電源', '車椅子対応'] %}<label><input type="checkbox" name="equipment" value="{{ option }}" {% if option in selected_equipment %}checked{% endif %}>{{ option }}</label>{% endfor %}</div></fieldset>
       <fieldset><legend>ペット（任意）</legend><div class="checks">{% for option in ['可', '不可', '専用スペースあり'] %}<label><input type="checkbox" name="pets" value="{{ option }}" {% if option in selected_pets %}checked{% endif %}>{{ option }}</label>{% endfor %}</div></fieldset>
@@ -66,12 +73,13 @@
       <input id="latitude" name="latitude" type="hidden" value="{{ form_data.get('latitude', '') }}"><input id="longitude" name="longitude" type="hidden" value="{{ form_data.get('longitude', '') }}">
       <div class="form-actions"><a class="home-link" href="{{ url_for('index') }}">⌂ ホームに戻る</a><button type="submit">{{ '変更を保存' if form_data.get('id') else '避難所を登録' }}</button></div>
     </form>
+    {% if form_data.get('id') %}<form class="delete-form" method="post" action="{{ url_for('shelter_delete', shelter_id=form_data.get('id')) }}" onsubmit="return confirm('この避難所の登録情報を削除しますか？');"><button class="delete-button" type="submit">登録情報を削除</button></form>{% endif %}
   </section>
 
   <section class="register-card">
     <h2>登録地点</h2>
     <div id="registerMap" aria-label="避難所の登録地点を確認する地図"></div>
-    <div class="field" style="margin-top: 20px;"><label for="image">施設の画像（任意）</label><input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" multiple form="shelterForm"><p class="file-note">JPG、JPEG、PNG、GIF、WEBP。1ファイル5MB以下。</p></div>
+    <div class="field" style="margin-top: 20px;"><label>登録済みの施設画像</label>{% if form_data.get('images') %}<div class="current-images">{% for image in form_data.get('images') %}<div class="current-image"><img src="{{ image }}" alt="登録済みの施設画像"><label><input type="checkbox" name="remove_images" value="{{ image }}" form="shelterForm"> この画像を削除</label></div>{% endfor %}</div>{% else %}<p class="file-note">登録済みの画像はありません。</p>{% endif %}<label for="image">画像を追加</label><input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp" multiple form="shelterForm"><p class="file-note">JPG、JPEG、PNG、GIF、WEBP。1ファイル5MB以下。</p></div>
     <div class="history"><h2>登録情報履歴</h2>{% if registration_history %}<ul class="history-list">{% for shelter in registration_history %}<li class="history-item"><span><a href="{{ url_for('shelter_edit', shelter_id=shelter.id) }}">{{ shelter.name or '名称未設定' }}</a></span><span class="history-time">{{ format_registered_at(shelter.registered_at) }}</span></li>{% endfor %}</ul>{% else %}<p>登録情報はありません。</p>{% endif %}</div>
   </section>
 </div>
@@ -107,11 +115,13 @@ document.addEventListener('DOMContentLoaded', function () {
     marker = L.marker([latitude, longitude]).addTo(map).bindPopup(escapeHTML(label)).openPopup();
     map.setView([latitude, longitude], 16);
   }
-  const hasFormCoordinates = Number.isFinite(Number(latitudeInput.value)) && Number.isFinite(Number(longitudeInput.value));
+  const latitudeValue = latitudeInput.value.trim();
+  const longitudeValue = longitudeInput.value.trim();
+  const hasFormCoordinates = latitudeValue !== '' && longitudeValue !== '' && Number.isFinite(Number(latitudeValue)) && Number.isFinite(Number(longitudeValue));
   if (hasFormCoordinates) {
     showMarker(Number(latitudeInput.value), Number(longitudeInput.value), nameInput.value || addressInput.value);
   } else {
-    showMarker(center[0], center[1], '青森駅');
+    showMarker(center[0], center[1], '青森市');
   }
   addressInput.addEventListener('input', function () { latitudeInput.value = ''; longitudeInput.value = ''; });
   button.addEventListener('click', function () {

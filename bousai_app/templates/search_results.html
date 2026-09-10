@@ -15,9 +15,9 @@
   .refine-forms { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .refine-form { display: flex; align-items: end; gap: 10px; }
   .refine-form .field { flex: 1; } label { display: block; margin-bottom: 6px; font-weight: 700; }
-  .results-card input { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
+  .results-card input, .results-card select { width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; color: var(--ink); background: #f7f8f9; font: inherit; }
   button, a.back-link, .suggestion-link { border: 0; border-radius: 7px; padding: 10px 16px; color: #fff; background: var(--blue); font: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
-  button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #8db9f5; outline-offset: 2px; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #8db9f5; outline-offset: 2px; }
   .condition { margin: 0 0 18px; color: #687582; }
   .error { padding: 10px 12px; border: 1px solid #d38c8c; color: #a32222; background: #fff4f4; }
   .suggestions { margin: 16px 0 0; padding-left: 20px; }
@@ -30,7 +30,9 @@
   .detail-grid { display: grid; grid-template-columns: 125px 1fr; gap: 8px 12px; margin: 0; }
   .detail-grid dt { font-weight: 700; } .detail-grid dd { margin: 0; overflow-wrap: anywhere; }
   .disaster-tag { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 7px; border-radius: 4px; color: #24539c; background: #e7f0fb; font-size: 13px; }
-  .facility-image { display: flex; align-items: center; justify-content: center; height: 110px; margin-bottom: 14px; border: 1px dashed var(--border); color: #687582; background: #f7f8f9; }
+  .facility-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .facility-image { display: flex; align-items: center; justify-content: center; min-width: 0; height: 160px; border: 1px dashed var(--border); color: #687582; background: #f7f8f9; }
+  .facility-image img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
   .route-map { height: 250px; margin-bottom: 10px; border-radius: 10px; }
   .route-status { min-height: 1.5em; margin: 8px 0; color: #24539c; font-size: 14px; }
   .distance { font-weight: 700; } .no-results { color: #687582; }
@@ -48,7 +50,7 @@
       <button type="submit">再検索</button>
     </form>
     <form class="refine-form" action="{{ url_for('search_results') }}" method="get">
-      <div class="field"><label for="result_shelter_name">施設名で再検索</label><input id="result_shelter_name" name="shelter_name" type="text" value="{{ shelter_name }}" placeholder="施設名を入力"></div>
+      <div class="field"><label for="result_shelter_id">施設名で再検索</label><select id="result_shelter_id" name="shelter_id"><option value="">施設名を選択してください</option>{% for shelter in shelters %}<option value="{{ shelter.id }}" {% if shelter.id|string == shelter_id %}selected{% endif %}>{{ shelter.name or '名称未設定' }}</option>{% endfor %}</select></div>
       <button type="submit">再検索</button>
     </form>
   </div>
@@ -67,15 +69,16 @@
     {% for shelter in results %}
     <article class="result-item">
       <div>
-        <div class="result-heading"><h2 class="result-name">{{ shelter.display_name }}</h2><a class="edit-link" href="{{ url_for('shelter_edit', shelter_id=shelter.id) }}">編集</a></div>
-        <div class="facility-image">
-          {% if shelter.display_image %}<img src="{{ shelter.display_image }}" alt="{{ shelter.display_name }}の施設画像">{% else %}施設画像未登録{% endif %}
+        <div class="result-heading"><h2 class="result-name" data-i18n="{{ shelter.display_name }}">{{ shelter.display_name }}</h2><a class="edit-link" href="{{ url_for('shelter_edit', shelter_id=shelter.id) }}">編集</a></div>
+        <div class="facility-images">
+          {% if shelter.display_images %}{% for image in shelter.display_images %}<div class="facility-image"><img src="{{ image }}" alt="{{ shelter.display_name }}の施設画像 {{ loop.index }}"></div>{% endfor %}{% else %}<div class="facility-image">施設画像未登録</div>{% endif %}
         </div>
         <dl class="detail-grid">
           <dt>開設状況</dt><dd>{{ shelter.display_open_status }}</dd>
           <dt>災害種別</dt><dd>{% if shelter.display_disaster_types %}{% for disaster in shelter.display_disaster_types %}<span class="disaster-tag">{{ disaster_options.get(disaster, '') }} {{ disaster }}</span>{% endfor %}{% else %}対応災害未登録{% endif %}</dd>
+          <dt>収容人数</dt><dd>{{ shelter.display_capacity }}</dd>
           <dt>郵便番号</dt><dd>{{ shelter.display_postal_code }}</dd>
-          <dt>住所</dt><dd>{{ shelter.display_address }}</dd>
+          <dt>住所</dt><dd data-i18n="{{ shelter.display_address }}">{{ shelter.display_address }}</dd>
           <dt>施設情報</dt><dd>{{ shelter.display_facility_info }}</dd>
           <dt>混雑情報</dt><dd>{{ shelter.display_congestion }}</dd>
           <dt>その他の情報</dt><dd>{{ shelter.display_other_info }}</dd>
